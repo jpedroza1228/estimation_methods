@@ -1,0 +1,21 @@
+[project]
+name = "estimation-methods"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Jonathan A. Pedroza (JP)", email = "jpedroza1228@berkeley.edu" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "matplotlib>=3.11.2",
+    "numpy>=2.5.3",
+    "pandas>=3.0.6",
+    "plotnine>=0.15.8",
+    "pyhere>=1.0.3",
+    "pyjanitor>=0.32.27",
+]
+
+[build-system]
+requires = ["uv_build>=0.9.11,<0.10.0"]
+build-backend = "uv_build"

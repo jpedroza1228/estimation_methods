@@ -47,3 +47,15 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+# Ignore .csv files
+*.csv
+
+# Ignore virtual environment
+/.venv
+
+# Ignore pdfs of quiz currently
+*.pdf
+
+# Ignore cleaning script of removing names
+cleaning.py
