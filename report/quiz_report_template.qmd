@@ -1,0 +1,878 @@
+---
+title: "DCM Assessment Report"
+subtitle: "STAT 134 Su26 - Quiz 2"
+jupyter: alt_grading_assess
+execute:
+  warning: false
+  message: false
+  eval: true
+  echo: false
+format: 
+ typst:
+   toc-title: Contents
+   toc: true
+   toc-depth: 2
+   number-sections: true
+   number-depth: 3
+---
+
+```{python}
+#| tags: [parameters]
+#| label: Parameters
+
+threshold = .8
+# attr1 = 'union_prob'
+# attr2 = 'intersect_prob'
+# attr3 = 'independence'
+# attr4 = 'joint_cond_marg_prob'
+# attr5 = 'mult_rule'
+
+attr1 = 'intersect_prob'
+attr2 = 'independence'
+attr3 = 'joint_cond_marg_prob'
+attr4 = 'mult_rule'
+
+# latent attribute names
+# q1: intersection probabilities (attr1)
+# q2: independence (attr2)
+# q3: joint, conditional, marginal probs (attr3)
+# q4: independence (attr2)
+# q5: multiplication rule (attr4)
+# q6: multiplication rule (for sequences) (attr4)
+
+```
+
+```{python}
+#| output: false
+#| label: Packages
+
+import pandas as pd
+import numpy as np
+import matplotlib
+import plotnine as pn
+from janitor import clean_names
+from great_tables import GT as gt
+import matplotlib.pyplot as plt
+from pyhere import here
+import arviz_base as azb
+import arviz_plots as azp
+import arviz_stats as azs
+from pathlib import Path
+import tempfile
+from cmdstanpy import CmdStanModel
+import joblib
+import os
+
+pd.set_option('display.max_columns', None)
+matplotlib.rcParams.update({'savefig.bbox': 'tight'})
+pn.theme_set(pn.theme_classic())
+
+data_directory = 'data/quizzes/2026/quiz2/anon_final/'
+q_directory = 'data/qmatrix/2026/quiz2/'
+stan_directory = 'stan_models/2026/quiz2/'
+diagnose_directory = 'reports/2026/diagnostics/2026/quiz2/'
+```
+
+# Creating Necessary DataFrames & Matrices
+
+```{python}
+#| label: DataFrame & Q-Matrix
+
+df = pd.read_csv(here(f'{data_directory}quiz2_anon_dcm.csv')).drop(columns = 'Unnamed: 0')
+q = pd.read_csv(here(f'{q_directory}quiz2_qmatrix_4attr.csv'))
+q['item'] = ['item' + str(i) for i in q['item']]
+
+print(df.head())
+print(q.head())
+```
+
+## Attribute Profile Matrix
+
+```{python}
+#| label: Attribute profile matrix
+
+alpha = pd.DataFrame([(a, b, c, d) for a in np.arange(2) for b in np.arange(2) for c in np.arange(2) for d in np.arange(2)])
+      
+alpha = alpha.rename(columns = {0: 'attr1',
+                                1: 'attr2',
+                                2: 'attr3',
+                                3: 'attr4'})
+
+alpha['class_label'] = alpha.astype(int).astype(str).agg(''.join, axis = 1)
+alpha = alpha.reset_index()
+alpha['index'] = alpha['index'] + 1
+
+alpha.head()
+```
+
+## Global Attribute Mastery Indicator Matrix
+
+```{python}
+#| label: Global attribute mastery
+
+xi = np.zeros((q.shape[0], alpha.shape[0]), dtype = int)
+
+# DINO model
+for i in range(q.shape[0]):
+  for c in range(alpha.shape[0]):
+    if np.any((q.drop(columns = 'item').to_numpy()[i, :] == 1) & (alpha.drop(columns = ['class_label', 'index']).to_numpy()[c, :] == 1)):
+      xi[i, c] = 1
+
+# DINA model
+# for i in range(q_arr.shape[0]):
+#         # Get the indices where the item requires an attribute
+#         req_attr = np.where(q_arr[i, :] == 1)[0]
+
+#         for c in range(alpha_arr.shape[0]):
+#           # Check if the class has a 1 at ALL those required indices
+#           if np.all(alpha_arr[c, req_attr] == 1):
+#               xi[i, c] = 1
+
+xi = pd.DataFrame(xi)
+xi.columns = ['lat_class' + str(i + 1) for i in range(len(xi.columns))]
+xi['item'] = ['item' + str(i + 1) for i in range(xi.shape[0])]
+
+xi.head()
+```
+
+```{python}
+#| label: Stan dictionary
+
+stan_dict = {
+  'J': df.drop(columns = 'anon_id').shape[0],
+  'I': df.drop(columns = 'anon_id').shape[1],
+  'C': alpha.drop(columns = ['class_label', 'index']).shape[0],
+  'K': q.drop(columns = 'item').shape[1],
+  'Y': df.drop(columns = 'anon_id').to_numpy(),
+  'Q': q.drop(columns = 'item').to_numpy(),
+  'alpha': alpha.drop(columns = ['class_label', 'index']).to_numpy(),
+  'xi': xi.drop(columns = 'item').to_numpy()
+}
+```
+
+# Stan Code
+
+```{python}
+#| label: prior-only and model; saved diagnostics
+#| output: false
+
+if Path(here(f'{stan_directory}quiz2_dino.joblib')).exists():
+  model, fit = joblib.load(here(f'{stan_directory}quiz2_dino.joblib'))
+  pmodel, pfit = joblib.load(here(f'{stan_directory}quiz2_dino_prior.joblib'))
+
+else:
+  file = os.path.join(here(f'{stan_directory}quiz2_model.stan'))
+  model = CmdStanModel(stan_file = file,
+                       cpp_options = {'STAN_THREADS': 'TRUE'})
+  
+  np.random.seed(7102026)
+  fit = model.sample(data = stan_dict,
+                     show_console = True,
+                     chains = 4,
+                     parallel_chains = 4,
+                     adapt_delta = .95,
+                     iter_warmup = 2000,
+                     iter_sampling = 2000)
+
+  diagnose = pd.DataFrame(fit.summary())
+  diagnose.to_csv(here(f'{diagnose_directory}quiz2_model_diagnostics.csv'))
+                     
+  joblib.dump([model, fit],
+              here(f'{stan_directory}quiz2_dino.joblib'),
+              compress = 3)
+  
+  prior_file = os.path.join(here(f'{stan_directory}quiz2_prior.stan'))
+  pmodel = CmdStanModel(stan_file = prior_file,
+                         cpp_options = {'STAN_THREADS': 'TRUE'})
+
+  np.random.seed(7102026)
+  pfit = pmodel.sample(data = stan_dict,
+                       show_console = True,
+                       chains = 4,
+                       parallel_chains = 4,
+                       # adapt_delta = .95,
+                       iter_warmup = 2000,
+                       iter_sampling = 2000)
+
+  joblib.dump([pmodel, pfit],
+              here(f'{stan_directory}quiz2_dino_prior.joblib'),
+              compress = 3)
+```
+
+```{python}
+#| label: Functions
+#| output: false
+
+def q_lower(x):
+    return x.quantile(.025)
+  
+def q_upper(x):
+    return x.quantile(.975)
+```
+
+```{python}
+#| label: Stan & Datatree data
+#| output: false
+
+idata = azb.from_cmdstanpy(
+    posterior = fit,
+    prior = pfit,
+    posterior_predictive = ['y_rep'],
+    prior_predictive = ['y_rep'],
+    observed_data = {'y_rep': stan_dict['Y']},
+    log_likelihood = 'log_lik'
+    )
+
+fitdf = fit.draws_pd()
+```
+
+# Diagnostics
+
+The diagnostic information below can be used to see whether the model you created and ran is showing accurate values. **Note**: This does not mean this is a good mdoel, but simply that the model has worked correctly. Below are some guidelines that you can follow to see whether you might need to go back and try a new model.
+
+-   **ESS_bulk** should be greater than 400.
+
+-   **R hat** values should be under 1.01.
+
+There are a few options that you can try out if your model did not work according to the guidelines above.
+
+1.  Check the `Check this box if model does not converge` box, which will alter some of the model parameters to be more focused at new starting points for the model and have more detailed steps (this will take the models longer to run)
+
+2.  Rethink the number of skills in your quiz
+
+    -   Your model may not work if you have a low number of items/questions and a large number of skills
+
+3.  Make sure the items/questions match the correct skill
+
+    -   Double check that your Q-matrix is correctly identified
+
+4.  Alter the priors
+
+More information about diagnostics can be found [here](https://mc-stan.org/learn-stan/diagnostics-warnings.html). 
+
+```{python}
+#| label: Top 5 Diagnostics
+
+if Path(here(f'{stan_directory}quiz2_dino.joblib')).exists():
+  None
+else:
+  gt(diagnose.sort_values('R_hat', ascending = False)[['ESS_bulk', 'ESS_tail', 'ESS_bulk/s', 'R_hat']].head()).tab_header(title = 'Diagnostics for Main Model', subtitle = 'With the Top 5 Rows')
+```
+
+## Trace Plots
+
+Trace plots are used as diagnostic plots. In these plots you should see what looks like static. If your trace plots don't look lik static, that might be a sign that the model is wrong and should be rerun with the additional checkbox. Trace plots for all parameter values are included below.
+
+### Trace Plots for Slipping Parameter
+
+```{python}
+#| label: Trace plot - slip
+
+azp.plot_trace(idata, var_names = ['slip'])
+```
+
+### Trace Plots for Guessing Parameter
+
+```{python}
+#| label: Trace plot - guess
+
+azp.plot_trace(idata, var_names = ['guess'])
+```
+
+### Trace Plots for Nu Parameter (Latent Class Proportions)
+
+```{python}
+#| label: Trace plot - nu
+
+azp.plot_trace(idata, var_names = ['nu'])
+```
+
+### Trace Plots for Lambda Parameters (Probability of Proficiency in Each Skill)
+
+```{python}
+#| label: Trace plot - lambda
+
+if fitdf.filter(regex = 'lambda').empty:
+    print('There are no lambda parameters for unconstrained structural models.')
+else:
+  azp.plot_trace(idata, var_names = ['lambda'], filter_vars = 'like')
+```
+
+### Trace Plots for Pi Parameters (Probability of Getting Answer Correct for Each Class)
+
+```{python}
+#| label: Trace plot - pi
+
+# azp.plot_trace(idata, var_names = ['pi'], filter_vars = 'like')
+
+# when too many plots, use this below
+# pi_dim_0 = number of items
+# pi_dim_1 = number of latent classes
+azp.plot_trace(idata, var_names = ['pi'], coords = {'pi_dim_0': 1, 'pi_dim_1': range(16)})
+```
+
+# Prior vs Posterior Distributions
+
+The plots below show where the prior distributions that you created from the shiny app for the parameters. These priors are then compared to the posterior distribution (the distribution for the model parameters once our model has seen the data you uploaded).
+
+Your priors and posteriors should have some overlap to show that your prior information matches the model once it has seen the data. If your priors and posteriors do not match, that means that your assumptions about your sample did not match the model findings once it has seen your data.
+
+```{python}
+#| label: Prior v Posterior plot - slip
+
+azp.plot_prior_posterior(idata, var_names = ['slip'], kind = 'kde')
+```
+
+```{python}
+#| label: Prior v Posterior plot - guess
+
+azp.plot_prior_posterior(idata, var_names = ['guess'], kind = 'kde')
+```
+
+```{python}
+#| label: Prior v Posterior plot - nu
+
+azp.plot_prior_posterior(idata, var_names = ['nu'], kind = 'kde')
+```
+
+```{python}
+#| label: Prior v Posterior plot - lambda
+
+if fitdf.filter(regex = 'lambda').empty:
+    print('There are no lambda parameters for unconstrained structural models.')
+else:
+  azp.plot_prior_posterior(idata, var_names = ['lambda'], filter_vars = 'like', kind = 'kde')
+```
+
+# Posterior Predictive Model Checks (PPMC)
+
+One thing that is helpful is to see how simulated data from your model is compared to the actual data. The black line is the data that you uploaded. The blue lines are the distributions that are created when trying to replicate the actual data for comparison. You'll want the blue lines to surround the black line. If only a small number of the blue lines are surrounding the black line then that could be a visual indication that your model may not be replicating the actual data.
+
+If none of the blue lines are close to the black line then that is a clear indication that your model is incorrect and you may need to go back and rerun the model with different parameters.
+
+Below are two options for viewing the data. The first is viewing the data through a density plot of the estimates in each replicated dataset compared to the actual data. Second is viewing the data through a cumulative probability, where the x-axis is the value of the replicated and actual datasets and the y-axis is the percentile of the data at that point.
+
+```{python}
+#| label: PPMC - Density
+
+azp.plot_ppc_dist(idata, kind = 'kde', group = 'posterior_predictive')
+```
+
+```{python}
+#| label: PPMC - Cumulative
+
+azp.plot_ppc_dist(idata, kind = 'ecdf', group = 'posterior_predictive')
+```
+
+## Posterior Predictive P (PPP) value
+
+PPP values are an additional method for assessing whether your model is accurately capturing the data you uploaded. These values are different from traditional p values because we are not interested in whether our sample is extremely different from the population. Instead, we want a ppp value to be around .5 to indicate that our replicate data are similar to the actual data. 
+
+Some guidelines are:
+
+* Values closer to .5 are optimal
+
+* Values on the edges (ppp < .1 or .05) indicate that the posterior samples are different from actual data, which is not what we want. We want our model to replicate the actual data well to have some more confidence in how our model behaves. 
+
+For the purpose of ppp values, we could use a variety of statistics as metrics, but for simplicity I only included the mean and standard deviation and metrics. The ppp-value is not provided, but you can gauge it visually. If the dot is in the middle then that means your model is doing a good job of replicating your data. If it is on the edge, then your model may not be the most accurate. Be aware that this is the ppp-value between all the replications to the actual data. There are also calculations at the item level to see if the replicated data is similar to the actual data for each item. This could also indicate what items are not getting captured well by the model.
+
+**Note**: It is also important to note that if you have a small sample size (n < 50), this may just be a consequence of not having much data. There is also the possibility that some metrics, like the mean may look bad, but the standard deviation is good. This requires additional examination.
+
+```{python}
+#| label: PPP visual - mean
+
+azp.plot_ppc_tstat(idata, t_stat = 'mean')
+```
+
+```{python}
+#| label: PPP visual - standard deviation
+
+azp.plot_ppc_tstat(idata, t_stat = 'std')
+```
+
+## Item-Level PPP-values
+
+Before we can conduct ppp-values for each item, I like to see the raw counts of the total scores for respondents in the actual data and how that compares to the average counts from our model. 
+
+```{python}
+#| label: All code run for plots/tables
+
+# slipping & guessing
+sg = fitdf.filter(regex = 'guess|slip').reset_index()
+sg = sg.rename(columns = {'index': 'draw'})
+
+sglong = sg.melt(id_vars = 'draw')
+sglong[['type', 'item']] = sglong['variable'].str.split('[', expand = True)
+sglong['item'] = sglong['item'].str.replace(']', '')
+sglong = sglong[['draw', 'type', 'item', 'value']]
+sglong[['draw', 'item']] = sglong[['draw', 'item']].astype(int)
+
+sgavg = sglong.groupby(['item', 'type'])
+
+sgavg = pd.DataFrame({
+  'mean': sgavg['value'].mean(),
+  'std': sgavg['value'].std(),
+  'q_lower': q_lower(sgavg['value']),
+  'q_upper': q_upper(sgavg['value'])
+}).reset_index()
+
+# pi matrix (classes getting items correct)
+pidf = fitdf.filter(regex = 'pi').reset_index()
+pidf = pidf.rename(columns = {'index': 'draw'})
+pilong = pidf.melt(id_vars = 'draw')
+pilong['variable'] = pilong['variable'].str.replace('pi[', '')
+pilong['variable'] = pilong['variable'].str.replace(']', '')
+pilong[['item', 'latclass']] = pilong['variable'].str.split(',', expand = True)
+pilong = pilong[['draw', 'item', 'latclass', 'value']]
+pilong[['draw', 'item', 'latclass']] = pilong[['draw', 'item', 'latclass']].astype(int)
+
+piavg = pilong.groupby(['item', 'latclass'])['value'].agg(['mean', 'std', q_lower, q_upper]).reset_index()
+
+piavg = piavg.merge(alpha, 'left', left_on = 'latclass', right_on = 'index')
+
+# replicated data
+ydcm = fitdf.filter(regex = '^y_rep')
+
+# calculations for odds ratios/conditional probabilities
+ydcm_long = ydcm.melt()
+
+ydcm_long['variable'] = ydcm_long['variable'].str.replace('y_rep[', '')
+ydcm_long['variable'] = ydcm_long['variable'].str.replace(']', '')
+ydcm_long[['stu', 'item']] = ydcm_long['variable'].str.split(',', expand = True)
+ydcm_long = ydcm_long[['stu', 'item', 'value']]
+ydcm_long[['stu', 'item']] = ydcm_long[['stu', 'item']].astype(int)
+ydcm_long['draw'] = ydcm_long.groupby(['stu', 'item']).cumcount()
+
+ydcm_wide = ydcm_long.pivot(index = ['stu', 'draw'], columns = 'item', values = 'value')
+ydcm_wide = ydcm_wide.reset_index()
+
+y_item_columns = [f'item{i}' for i in np.arange(stan_dict['I']) + 1]
+ydcm_wide.columns = ['stu', 'draw'] + y_item_columns
+
+ydcm_wide['total'] = ydcm_wide.filter(regex = 'item').sum(axis = 1)
+ydcm_wide_count = ydcm_wide.groupby('draw')['total'].value_counts().reset_index()
+
+ydcm_scores = ydcm_wide_count.groupby('total')['count'].agg(
+    count = 'mean',
+    lower = q_lower,
+    upper = q_upper
+).reset_index()
+
+ydcm_wide_count['type'] = 'draw_counts'
+ydcm_scores['type'] = 'avg_counts'
+
+ydcm_wide_count['count'] = ydcm_wide_count['count'].astype(float)
+ydcm_wide_count = ydcm_wide_count.merge(ydcm_scores, 'outer')
+
+y_item = pd.DataFrame(stan_dict['Y'])
+y_item.columns = y_item_columns
+
+y_item['total'] = y_item.sum(axis = 1)
+y_item_count = y_item['total'].value_counts().reset_index()
+y_item_count['type'] = 'actual_counts'
+y_item_count['count'] = y_item_count['count'].astype(float)
+
+ydcm_wide_count = ydcm_wide_count.merge(y_item_count, 'outer')
+
+# t-values
+y_describe = y_item.filter(regex = 'item').agg(['mean', 'std']).reset_index()
+y_describe.drop(columns = 'index').transpose().round(2)
+
+stu_n = y_item.shape[0]
+
+t_stats_dict = {}
+
+# Loop from 1 to 7
+for i in range(1, stan_dict['I']):
+    item_name = f"item{i}"
+    
+    # Extract mean and std for the specific item
+    # We use .values[0] to get the scalar number out of the filtered dataframe
+    avg = y_describe.loc[y_describe['index'] == 'mean', item_name].values[0]
+    std = y_describe.loc[y_describe['index'] == 'std', item_name].values[0]
+    
+    # Calculate the observed t-value
+    # Formula: T = avg / (std / sqrt(n))
+    t_val = avg / ((std + 1e-10) / np.sqrt(stu_n))
+    
+    # Store it in our dictionary
+    t_stats_dict[item_name] = t_val
+
+# Convert the dictionary into a final Pandas Series
+obs_t_series = pd.Series(t_stats_dict)
+
+obs_t_series = obs_t_series.reset_index()
+obs_t_series = obs_t_series.rename(columns = {'index': 'item',
+                                              0: 'observed_t'})
+obs_t_series['item'] = obs_t_series['item'].str.replace('item', '')
+obs_t_series['item'] = obs_t_series['item'].astype(float)
+
+y_long_avg = ydcm_long.groupby(['item', 'draw'])['value'].agg(['mean', 'std']).reset_index()
+y_long_avg['n'] = stu_n
+
+y_long_avg['t_draw'] = y_long_avg['mean']/((y_long_avg['std'] + 1e-10)/np.sqrt(y_long_avg['n']))
+
+y_long_avg = y_long_avg.merge(obs_t_series, 'inner', 'item')
+
+# attribute calculations
+attrdf = fitdf.filter(regex = '^prob_resp_attr').reset_index()
+attrdf = attrdf.rename(columns = {'index': 'draw'})
+attrlong = attrdf.melt(id_vars = 'draw')
+
+attrlong['variable'] = attrlong['variable'].str.replace('prob_resp_attr[', '')
+attrlong['variable'] = attrlong['variable'].str.replace(']', '')
+attrlong[['stu', 'attr']] = attrlong['variable'].str.split(',', expand = True)
+attrlong[['draw', 'stu', 'attr']] = attrlong[['draw', 'stu', 'attr']].astype(int)
+attrlong = attrlong[['draw', 'stu', 'attr', 'value']]
+
+attravg = attrlong.groupby(['stu', 'attr'])['value'].agg(['mean', 'std', q_lower, q_upper]).reset_index()
+
+# mastery/proficiency thresholds
+attravg['mastery'] = np.where(attravg['mean'] > threshold, 1, 0)
+
+attr_w = attravg.pivot(index = 'stu', columns = 'attr', values = 'mastery').reset_index()
+
+# reliability
+attravg['acc_comp'] = attravg['mean'].apply(lambda p: max(p, 1 - p))
+attravg['cons_comp'] = attravg['mean'].apply(lambda p: p**2 + (1 - p)**2)
+
+# latent classes
+attr_class = fitdf.filter(regex = '^prob_resp_class').reset_index()
+attr_class = attr_class.rename(columns = {'index': 'draw'})
+class_long = attr_class.melt(id_vars = 'draw')
+
+class_long['variable'] = class_long['variable'].str.replace('prob_resp_class[', '')
+class_long['variable'] = class_long['variable'].str.replace(']', '')
+class_long[['stu', 'latclass']] = class_long['variable'].str.split(',', expand = True)
+class_long[['draw', 'stu', 'latclass']] = class_long[['draw', 'stu', 'latclass']].astype(int)
+class_long = class_long[['draw', 'stu', 'latclass', 'value']]
+
+class_max = class_long.loc[class_long['value'] == class_long.groupby('stu')['value'].transform('max')]
+class_max['high_prob_class'] = class_max['latclass']
+
+class_wmax = class_long.merge(class_max, 'inner', ['latclass', 'stu'])
+class_wmax = class_wmax.drop(columns = ['draw_y', 'latclass', 'value_y'])
+class_wmax = class_wmax.rename(columns = {'draw_x': 'draw',
+                             'value_x': 'value',
+                             'high_prob_class': 'class_member'})
+
+class_avg = class_wmax.groupby(['stu', 'class_member'])['value'].agg(['mean', 'std', q_lower, q_upper]).reset_index()
+class_avg = class_avg.merge(alpha, 'inner', left_on = 'class_member', right_on = 'index')
+
+class_prop = class_long.groupby('latclass')['value'].agg(['mean', 'std', q_lower, q_upper]).reset_index()
+class_prop = class_prop.merge(alpha, 'inner', left_on = 'latclass', right_on = 'index')
+```
+
+The plot below shows how many respondents got the following totals in the actual data and the average counts from the replciated datasets with 95% credible intervals. The credible intervals show that we there is 95% confidence that the true value should be within the intervals. If the credible intervals have the actual value within them that is an indicator that the model captured the true value. 
+
+```{python}
+#| label: Plot - Compare actual vs replicated total counts
+
+(
+  pn.ggplot(ydcm_wide_count.loc[ydcm_wide_count['type'] != 'draw_counts'],
+            pn.aes('total',
+                   'count'))
+  + pn.geom_errorbar(pn.aes(ymin = 'lower',
+                            ymax = 'upper'),
+                     alpha = .5,
+                     linetype = 'dashed')
+  + pn.geom_point(pn.aes(color = 'type'), alpha = .8)
+  + pn.scale_color_brewer('qual', 'Dark2')
+  + pn.scale_x_continuous(limits = [1, piavg['item'].unique().max()],
+                          breaks = piavg['item'].unique())
+  + pn.labs(title = 'Comparisons between Actual Counts of Respondents\nGetting Items/Questions Correct',
+  subtitle = 'And Posterior Average Correct')
+)
+```
+
+The following code calculates "t-values" to compare to the actual data to use a ppp-values for each item. Similar to the overall ppp-values before, we want the ppp-values for each item to be between .05 and .95. For more accuracy, we would want values between .2 and .8. Anything outside of this range could indicate that the model did not capture the data accurately.
+
+```{python}
+#| label: PPP values per item
+
+print('Average correct per item:', y_long_avg['t_draw'].describe())
+
+t_compare_list = [np.mean(y_long_avg.loc[(y_long_avg['item'] == i), 't_draw'] > y_long_avg.loc[(y_long_avg['item'] == i), 'observed_t']) for i in np.arange(stan_dict['I'])]
+
+gt(pd.DataFrame({'item': np.arange(stan_dict['I']),
+                 't_prop_over': t_compare_list}).round(2)).tab_header(title = 'Item Level PPP')
+
+# TODO get this to work
+# np.unique(y_long_avg['item'])
+# for i in np.unique(y_long_avg['item']):
+#   (
+#   pn.ggplot(y_long_avg.loc[y_long_avg['item'] == i],
+#             pn.aes('t_draw'))
+#   + pn.geom_density(color = 'black',
+#                       fill = 'seagreen',
+#                       alpha = .5)
+#   + pn.geom_vline(pn.aes(xintercept = 'observed_t'),
+#                   color = 'red',
+#                   linetype = 'dashed') 
+#   )
+```
+
+```{python}
+#| label: ppp dataset
+
+pd.DataFrame({'item': np.arange(stan_dict['I']),
+              't_prop_over': t_compare_list}).to_csv(here(f'{diagnose_directory}item_ppp.csv')) # TODO change directory
+```
+
+# Latent Classes
+
+There was brief discussion on latent classes, but overall classes are respondents grouped into these groups based on what skill(s) they are proficient in. For 2 skills there will be four classes, which gives you the following options:
+
+-   00 = Not proficient in either skill
+
+-   10 = Proficient in skill 1, but not proficient in skill 2
+
+-   01 = Not proficient in skill 1, but proficient in skill 2
+
+-   11 = Proficient in both skills
+
+In the example above, you would want most if not all of your students to be in the 11 group, indicating that they are likely to have both skills assessed in your data.
+
+```{python}
+#| label: Latent classes - respondent class membership < .5
+
+(
+  pn.ggplot(class_avg.loc[class_avg['mean'] < .5],
+    pn.aes('stu', 'mean'))
+  + pn.geom_errorbar(pn.aes(ymin = 'q_lower', ymax = 'q_upper'),
+    linetype = 'dashed',
+    alpha = .7)
+  + pn.geom_point(pn.aes(color = 'factor(class_label)'),
+                  alpha = .7)
+  + pn.coord_flip()
+  + pn.scale_color_brewer('qual', 'Dark2')
+  + pn.labs(title = 'Probability of Membership in Latent Classes',
+            subtitle = 'For Each Respondent')
+)
+```
+
+```{python}
+#| label: Latent classes - respondent class membership .5 - .75
+
+(
+  pn.ggplot(class_avg.loc[class_avg['mean'].between(.5, .75)],
+    pn.aes('stu', 'mean'))
+  + pn.geom_errorbar(pn.aes(ymin = 'q_lower', ymax = 'q_upper'),
+    linetype = 'dashed',
+    alpha = .7)
+  + pn.geom_point(pn.aes(color = 'factor(class_label)'),
+                  alpha = .7)
+  + pn.coord_flip()
+  + pn.scale_color_brewer('qual', 'Dark2')
+  + pn.labs(title = 'Probability of Membership in Latent Classes',
+            subtitle = 'For Each Respondent')
+)
+```
+
+```{python}
+#| label: Latent classes - respondent class membership .75 - .95
+
+(
+  pn.ggplot(class_avg.loc[(class_avg['mean'] < .95) & (class_avg['mean'] > .75)],
+    pn.aes('stu', 'mean'))
+  + pn.geom_errorbar(pn.aes(ymin = 'q_lower', ymax = 'q_upper'),
+    linetype = 'dashed',
+    alpha = .7)
+  + pn.geom_point(pn.aes(color = 'factor(class_label)'),
+                  alpha = .7)
+  + pn.coord_flip()
+  + pn.scale_color_brewer('qual', 'Dark2')
+  + pn.labs(title = 'Probability of Membership in Latent Classes',
+            subtitle = 'For Each Respondent')
+)
+```
+
+```{python}
+#| label: Latent classes - Respondent class membership > .95
+
+(
+  pn.ggplot(class_avg.loc[class_avg['mean'] > .95],
+    pn.aes('stu', 'mean'))
+  + pn.geom_errorbar(pn.aes(ymin = 'q_lower', ymax = 'q_upper'),
+    linetype = 'dashed',
+    alpha = .7)
+  + pn.geom_point(pn.aes(color = 'factor(class_label)'),
+                  alpha = .7)
+  + pn.coord_flip()
+  + pn.scale_color_brewer('qual', 'Dark2')
+  + pn.labs(title = 'Probability of Membership in Latent Classes',
+            subtitle = 'For Each Respondent')
+)
+```
+
+
+We can also get the proportions of respondents that are in each class. This can indicate where the majority of students are at in regard to being proficient in the skills assessed in your quiz/assessment.
+
+```{python}
+#| label: Latent classes - Proportions in each class
+
+(
+  pn.ggplot(class_prop,
+            pn.aes('factor(class_label)',
+                   'mean'))
+  + pn.geom_errorbar(pn.aes(ymin = 'q_lower', ymax = 'q_upper'),
+                     linetype = 'dashed',
+                     alpha = .7)
+  + pn.geom_point(alpha = .7,
+                  color = 'seagreen')
+  + pn.coord_flip()
+  + pn.labs(title = 'Probability of Latent Class Proportions')
+)
+```
+
+# Proficiency/Mastery
+
+While calculations are created to see how many respondents can be deemed proficent in each of the skills (see report folder), we can also see generally how many respondents are above the designated threshold. Being above the threshold indicates that on average, these respondents are likely to be proficient for that skill.  
+
+```{python}
+#| label: Plot - respondent proficiency
+
+(
+  pn.ggplot(attravg,
+            pn.aes('stu',
+                   'mean'))
+  + pn.geom_errorbar(pn.aes(ymin = 'q_lower', ymax = 'q_upper'),
+                     color = 'seagreen',
+                     alpha = .1)
+  + pn.geom_point(alpha = .7,
+                  color = 'seagreen')
+  + pn.geom_hline(yintercept = threshold,
+                  color = 'black',
+                  linetype = 'dashed')
+  + pn.facet_wrap('attr')
+  + pn.theme(legend_position = 'none',
+             axis_text_x = pn.element_blank())
+)
+
+```
+
+```{python}
+#| label: Proficiency List
+
+attr_w = pd.concat([df['anon_id'], attr_w], axis = 1)
+attr_w = attr_w.drop(columns = 'stu')
+attr_w.columns = ['anon_id', attr1, attr2, attr3, attr4]
+
+gt(attr_w.drop(columns = 'anon_id'))
+```
+
+```{python}
+#| label: Proficiency data (csv)
+
+attravg.drop(columns = ['acc_comp', 'cons_comp']).to_csv(here('reports/2026/quiz2/respondent_proficiency_raw.csv'))
+attr_w.to_csv(here('reports/2026/quiz2/respondent_proficiency_list.csv'))
+```
+
+# Model Fit: Leave One-Out Cross Validation (LOO)
+
+To evaluate how well the model generalizes to new data, LOO is used. For the general purposes of this app and report, we'll want to pay attention to the Pareto k diagnostic values. If all of these values are deemed `good` then the model generalizes well to new data. 
+
+```{python}
+#| label: Loo fit for our model
+
+# azs.loo(idata)
+```
+
+# Item-Level Slipping & Guessing
+
+Slipping and guessing parameters focus on the probability that a respondent will slip or guess for each item. Slipping is the probability that a respondent will get an item incorrect even though they have at least one skill that measures that item (DINO) or all the skills assessed through that item (DINA). Guessing is the probability that a respondent will get an item correct even though they may not have at least one skill that measures the item (DINO) or all the skills needed for that item (DINA).
+
+```{python}
+#| label: Plot - slipping and guessing
+
+(
+  pn.ggplot(sgavg,
+    pn.aes('factor(item)', 'mean'))
+  + pn.geom_errorbar(pn.aes(ymin = 'q_lower', ymax = 'q_upper'),
+  linetype = 'dashed',
+  alpha = .7)
+  + pn.geom_point(pn.aes(color = 'type'),
+                  alpha = .7)
+  + pn.coord_flip()
+  + pn.facet_wrap('type')
+  + pn.scale_y_continuous(limits = [0, 1],
+                          breaks = np.arange(0, 1.1, .1))
+  + pn.scale_color_brewer('qual', 'Dark2')
+  + pn.labs(title = 'Probability of Guessing/Slipping',
+            x = 'Item',
+            y = 'Probability',
+            caption = 'Guess = Guessed and got answer correct\nSlip = Should know the answer, but got the item wrong')  
+  + pn.theme(legend_position = 'none')
+)
+```
+
+# Probabilities of Each Class Getting Items Correct
+
+Depending on whatever class respondents belong to, these plots show which items a respondent in each class is likely to get correct. For the class that should have all the skills, a respondent should have all or most of the items correct. Similarly, the class lacking proficiency in the skills should show a respondent is likely to get most of the items incorrect.
+
+```{python}
+#| label: Pi matrix - Items likelihood of items correct by class
+
+(
+  pn.ggplot(piavg,
+            pn.aes('item',
+                   'mean'))
+  + pn.geom_errorbar(pn.aes(ymin = 'q_lower', ymax = 'q_upper'),
+                     linetype = 'dashed',
+                     color = 'gray',
+                     alpha = .7)
+  + pn.geom_point(alpha = .7,
+                  color = 'seagreen')
+  + pn.geom_hline(yintercept = .5,
+  color = 'black',
+  linetype = 'dashed')
+  + pn.scale_x_continuous(limits = [1, piavg['item'].unique().max()],
+                          breaks = piavg['item'].unique())
+  + pn.coord_flip()
+  + pn.facet_wrap('class_label')
+  + pn.labs(title = 'Probability of Getting Items Correct',
+  subtitle = 'By Latent Class')
+  + pn.theme(legend_position = 'none')
+)
+```
+
+```{python}
+#| label: Pi matrix for class with all proficiencies
+
+(
+  pn.ggplot(piavg.loc[piavg['class_label'] == '1111'],
+            pn.aes('item',
+                   'mean'))
+  + pn.geom_errorbar(pn.aes(ymin = 'q_lower', ymax = 'q_upper'),
+                     linetype = 'dashed',
+                     color = 'gray',
+                     alpha = .7)
+  + pn.geom_point(alpha = .7,
+                  color = 'seagreen')
+  + pn.geom_hline(yintercept = .5,
+  color = 'black',
+  linetype = 'dashed')
+  + pn.scale_x_continuous(limits = [1, piavg['item'].unique().max()],
+                          breaks = piavg['item'].unique())
+  + pn.coord_flip()
+  + pn.facet_wrap('class_label')
+  + pn.labs(title = 'Probability of Getting Items Correct',
+  subtitle = 'By Latent Class')
+  + pn.theme(legend_position = 'none')
+)
+```
+
+# Reliability
+
+Model reliability can be broken down into two parts. First, accuracy of the DCM is how well the model is measuring true proficiency of the skills. Second, consistency is a measure of how likely a respondent would get the same proficiency values if tested again.
+
+```{python}
+#| label: Reliability metrics for model
+
+reliability = attravg.groupby('attr').agg(
+    accuracy = ('acc_comp', 'mean'),
+    consistency = ('cons_comp', 'mean')
+).reset_index()
+
+gt(reliability.round(3)).tab_header(title = 'Accuracy & Consistency')
+```
