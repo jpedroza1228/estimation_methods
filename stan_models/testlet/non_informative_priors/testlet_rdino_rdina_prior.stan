@@ -1,3 +1,5 @@
+// TODO include testlet effect (follow testlet_dino_dina_model.stan syntax from slightly_informative_priors)
+
 data {
   int<lower=1> J;
   int<lower=1> I;
@@ -11,8 +13,7 @@ data {
 
 parameters {
   simplex[C] nu;
-  // vector<lower=0, upper=1>[I] slip;
-  // vector<lower=0, upper=1>[I] guess;
+  vector<lower=0, upper=1>[I] noise;
 }
 
 transformed parameters {
@@ -23,9 +24,7 @@ transformed parameters {
 
   for (c in 1:C){
     for (i in 1:I){
-      // pi[i,c] = pow((1 - slip[i]), xi[i,c]) *
-      // pow(guess[i], (1 - xi[i,c]));
-      // TODO Need to change this for 
+      pi[i,c] = pow((1 - noise[i]), xi[i,c]) * pow(noise[i], (1 - xi[i,c]));
     }
   }
 }
@@ -35,8 +34,7 @@ model{
   array[I] real eta;
 
   for (i in 1:I){
-    // slip[i] ~ beta(5, 20);
-    // guess[i] ~ beta(5, 20);
+    noise[i] ~ beta(1, 1);
   }
 }
 
