@@ -1,0 +1,164 @@
+\documentclass[11pt,a4paper]{article}
+
+% --- Required Packages ---
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsfonts,bm,mathtools}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{hyperref}
+
+% --- Document Metadata ---
+\title{\textbf{Deterministic Inputs, Noisy ``AND'' Gate (DINA) Model: Mathematical Formulation and MLE, MCMC \& MAP Estimation}}
+\author{\textbf{Jonathon A. Pedroza \& Boting Zhang}}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+The Deterministic Inputs, Noisy ``AND'' Gate (DINA) model defined on a discrete 
+latent attribute space.
+
+\section{Model Parameters and Latent Space Formulation}
+
+Let $N$ denote the total number of examinees ($i = 1, \dots, N$), $J$ denote the 
+total number of test items ($j = 1, \dots, J$), and $K$ denote the number of binary 
+latent attributes ($k = 1, \dots, K$).
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Latent Attribute Vector:} Examinee $i$'s attribute profile is represented 
+    by the binary vector:
+    \begin{equation}
+        \boldsymbol{\alpha}_i = (\alpha_{i1}, \alpha_{i2}, \dots, \alpha_{iK})^T \in \{0, 1\}^K
+    \end{equation}
+    where $\alpha_{ik} = 1$ if examinee $i$ has mastered attribute $k$, and $0$ otherwise.
+
+    \item \textbf{Latent Class Space:} The total number of distinct attribute patterns is $L = 2^K$. Let $\boldsymbol{\alpha}_l = (\alpha_{l1}, \dots, \alpha_{lK})^T$ represent the $l$-th attribute profile vector for $l \in \{1, \dots, L\}$. The proportion of examinees belonging to latent class $l$ is governed by the structural parameter vector:
+    \begin{equation}
+        \boldsymbol{\pi} = (\pi_1, \pi_2, \dots, \pi_L)^T, \quad \text{where } \pi_l = P(\boldsymbol{\alpha}_i = \boldsymbol{\alpha}_l) \quad \text{and} \quad \sum_{l=1}^L \pi_l = 1
+    \end{equation}
+
+    \item \textbf{Item Response:} Let $Y_{ij} \in \{0, 1\}$ be the observed response of examinee $i$ on item $j$, where $Y_{ij} = 1$ denotes a correct response and $0$ denotes an incorrect response.
+\end{itemize}
+
+\section{Matrix Definitions}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Observed Response Matrix ($\mathbf{Y}$):}
+    \begin{equation}
+        \mathbf{Y} = [Y_{ij}]_{N \times J} \in \{0, 1\}^{N \times J}
+    \end{equation}
+
+    \item \textbf{Q-Matrix ($\mathbf{Q}$):} The expert-defined design matrix specifying attribute requirements for items:
+    \begin{equation}
+        \mathbf{Q} = [q_{jk}]_{J \times K} \in \{0, 1\}^{J \times K}
+    \end{equation}
+    where $q_{jk} = 1$ if item $j$ requires mastery of attribute $k$, and $q_{jk} = 0$ otherwise.
+
+    \item \textbf{Latent Profile Matrix ($\mathbf{A}$):} The enumeration of all $L = 2^K$ latent attribute profiles:
+    \begin{equation}
+        \mathbf{A} = [\alpha_{lk}]_{L \times K} \in \{0, 1\}^{L \times K}
+    \end{equation}
+
+    \item \textbf{Ideal Response Matrix ($\mathbf{H}$):} The $L \times J$ deterministic indicator matrix defining whether latent class $l$ meets all attribute requirements for item $j$:
+    \begin{equation}
+        \mathbf{H} = [H_{lj}]_{L \times J} \in \{0, 1\}^{L \times J}, \quad \text{where } H_{lj} = \prod_{k=1}^K \alpha_{lk}^{q_{jk}}
+    \end{equation}
+\end{itemize}
+
+\section{The Deterministic Gate and Item Response Function (IRF)}
+
+The DINA model assumes a non-compensatory (conjunctive) mechanism: an examinee must possess \textit{all} attributes required by an item to have a high probability of answering correctly.
+
+\subsection{Deterministic Latent Response \texorpdfstring{($\eta_{ij}$)}{(\textbackslash{}eta\_ij)}}
+
+The deterministic latent response $\eta_{ij}$ indicates whether examinee $i$ possesses all attributes required by item $j$:
+\begin{equation}
+    \eta_{ij} = \prod_{k=1}^K \alpha_{ik}^{q_{jk}} = I\left( \boldsymbol{\alpha}_i \succeq \mathbf{q}_j \right)
+\end{equation}
+where $\mathbf{q}_j = (q_{j1}, \dots, q_{jK})$ is the $j$-th row of $\mathbf{Q}$, and $I(\cdot)$ is the indicator function. Thus, $\eta_{ij} = 1$ if and only if $\alpha_{ik} \ge q_{jk}$ for all $k = 1, \dots, K$.
+
+\subsection{Stochastic Parameters and IRF Formulation}
+
+Real-world item responses deviate from deterministic predictions due to stochastic noise governed by two item parameters for each item $j$:
+\begin{enumerate}
+    \item \textbf{Slipping parameter ($s\_j$):} The probability that an examinee who has mastered all required attributes ($\eta_{ij} = 1$) answers incorrectly:
+    \begin{equation}
+        s_j = P(Y_{ij} = 0 \mid \eta_{ij} = 1), \quad 0 < s_j < 1
+    \end{equation}
+
+    \item \textbf{Guessing parameter ($g\_j$):} The probability that an examinee who lacks at least one required attribute ($\eta_{ij} = 0$) answers correctly:
+    \begin{equation}
+        g_j = P(Y_{ij} = 1 \mid \eta_{ij} = 0), \quad 0 < g_j < 1
+    \end{equation}
+\end{enumerate}
+
+Monotonicity and identifiability dictate that $1 - s_j > g_j$ (i.e., $s_j + g_j < 1$).
+
+The Item Response Function (IRF) conditional on profile $\boldsymbol{\alpha}_i$ is defined as:
+\begin{equation}
+    P(Y_{ij} = 1 \mid \boldsymbol{\alpha}_i, s_j, g_j) = (1 - s_j)^{\eta_{ij}} g_j^{1 - \eta_{ij}}
+\end{equation}
+
+Equivalently, the conditional probability for response $y \in \{0, 1\}$ is:
+\begin{equation}
+    P(Y_{ij} = y \mid \boldsymbol{\alpha}_i, s_j, g_j) = \left[ (1 - s_j)^{\eta_{ij}} g_j^{1 - \eta_{ij}} \right]^y \left[ s_j^{\eta_{ij}} (1 - g_j)^{1 - \eta_{ij}} \right]^{1 - y}
+\end{equation}
+
+\section{Likelihood Functions}
+
+Under local independence, item responses are conditionally independent given an examinee's latent attribute vector $\boldsymbol{\alpha}_i$.
+
+\subsection{Individual Conditional Likelihood}
+\begin{align}
+    P(\mathbf{Y}_i \mid \boldsymbol{\alpha}_l, \boldsymbol{s}, \boldsymbol{g}) &= \prod_{j=1}^J P(Y_{ij} \mid \boldsymbol{\alpha}_l, s_j, g_j) \nonumber \\
+    &= \prod_{j=1}^J \left[ (1 - s_j)^{H_{lj}} g_j^{1 - H_{lj}} \right]^{Y_{ij}} \left[ s_j^{H_{lj}} (1 - g_j)^{1 - H_{lj}} \right]^{1 - Y_{ij}}
+\end{align}
+
+\subsection{Marginal Likelihood for Person \texorpdfstring{$i$}{i}}
+
+Marginalizing over all $L$ latent classes yields:
+\begin{equation}
+    P(\mathbf{Y}_i \mid \boldsymbol{s}, \boldsymbol{g}, \boldsymbol{\pi}) = \sum_{l=1}^L \pi_l P(\mathbf{Y}_i \mid \boldsymbol{\alpha}_l, \boldsymbol{s}, \boldsymbol{g})
+\end{equation}
+
+\subsection{Observed Data Log-Likelihood}
+
+Assuming independent and identically distributed examinees:
+\begin{equation}
+    \log L(\boldsymbol{s}, \boldsymbol{g}, \boldsymbol{\pi} \mid \mathbf{Y}) = \sum_{i=1}^N \log \left( \sum_{l=1}^L \pi_l \prod_{j=1}^J P(Y_{ij} \mid \boldsymbol{\alpha}_l, s_j, g_j) \right)
+\end{equation}
+
+
+
+
+
+
+
+\section{Expectation-Maximization (EM) Algorithm for MLE}
+
+
+
+
+
+
+
+
+\section{Markov Chain Monte Carlo (MCMC) Estimation}
+
+
+
+
+
+
+
+
+
+
+\section{Maximum A Posteriori (MAP) Estimation}
+
+
+
+\section{References}
+
+\end{document}
