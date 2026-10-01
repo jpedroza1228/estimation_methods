@@ -181,7 +181,7 @@ diagnose = pd.DataFrame(fit.summary())
 diagnose.to_csv(here(f'{diagnose_directory}dina_no_testlet_attr7_model_diagnostics.csv'))
                    
 joblib.dump([model, fit],
-            here(f'{stan_directory}testlet_dino_dina_model.joblib'),
+            here(f'{stan_directory}dino_dina_model.joblib'),
             compress = 3)
 
 prior_file = os.path.join(here(f'{stan_directory}dino_dina_prior.stan'))
@@ -198,7 +198,7 @@ pfit = pmodel.sample(data = stan_dict,
                      iter_sampling = 2000)
 
 joblib.dump([pmodel, pfit],
-            here(f'{stan_directory}testlet_dino_dina_prior.joblib'),
+            here(f'{stan_directory}dino_dina_prior.joblib'),
             compress = 3)
 ```
 
