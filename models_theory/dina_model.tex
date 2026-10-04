@@ -1,130 +1,99 @@
 \documentclass[11pt,a4paper]{article}
 
 % --- Required Packages ---
-\usepackage[utf8]{inputenc}
 \usepackage[margin=1in]{geometry}
-\usepackage{amsmath,amssymb,amsfonts,bm,mathtools}
-\usepackage{enumitem}
+\usepackage{amsmath,amssymb,amsfonts,bm,mathtools,amsthm}
 \usepackage{booktabs}
 \usepackage{hyperref}
 
+% --- Theorem Environments ---
+\newtheorem{theorem}{Theorem}
+
 % --- Document Metadata ---
-\title{\textbf{Deterministic Inputs, Noisy ``AND'' Gate (DINA) Model: Mathematical Formulation and MLE, MCMC \& MAP Estimation}}
+\title{\textbf{Deterministic Inputs, Noisy ``AND'' Gate (DINA) Model: Rigorous Mathematical Formulation, EM Algorithm, MAP, and MCMC Marginalization}}
 \author{\textbf{Jonathon A. Pedroza \& Boting Zhang}}
 \date{\today}
 
 \begin{document}
 
 \maketitle
-The Deterministic Inputs, Noisy ``AND'' Gate (DINA) model defined on a discrete 
-latent attribute space.
 
-\section{Model Parameters and Latent Space Formulation}
+\section{DINA Model Formulation}
+\subsection{Latent Space Formulation \& Model Identifiability}
 
-Let $N$ denote the total number of examinees ($i = 1, \dots, N$), $J$ denote the 
-total number of test items ($j = 1, \dots, J$), and $K$ denote the number of binary 
-latent attributes ($k = 1, \dots, K$).
+Let $N$ denote the total number of examinees ($i = 1, \dots, N$), $J$ denote the total number of items ($j = 1, \dots, J$), and $K$ denote the number of binary latent attributes ($k = 1, \dots, K$).
 
-\begin{itemize}[leftmargin=*]
-    \item \textbf{Latent Attribute Vector:} Examinee $i$'s attribute profile is represented 
-    by the binary vector:
+\begin{itemize}
+    \item \textbf{Latent Attribute Vector:} Examinee $i$'s attribute mastery profile is represented by the binary vector:
     \begin{equation}
         \boldsymbol{\alpha}_i = (\alpha_{i1}, \alpha_{i2}, \dots, \alpha_{iK})^T \in \{0, 1\}^K
     \end{equation}
     where $\alpha_{ik} = 1$ if examinee $i$ has mastered attribute $k$, and $0$ otherwise.
 
-    \item \textbf{Latent Class Space:} The total number of distinct attribute patterns is $L = 2^K$. Let $\boldsymbol{\alpha}_l = (\alpha_{l1}, \dots, \alpha_{lK})^T$ represent the $l$-th attribute profile vector for $l \in \{1, \dots, L\}$. The proportion of examinees belonging to latent class $l$ is governed by the structural parameter vector:
+    \item \textbf{Latent Class Space:} The latent class space comprises $L = 2^K$ distinct attribute patterns. Let $\boldsymbol{\alpha}_l = (\alpha_{l1}, \dots, \alpha_{lK})^T$ denote the $l$-th attribute profile vector for $l \in \{1, \dots, L\}$. The prior distribution of latent class membership is governed by the structural probability vector:
     \begin{equation}
-        \boldsymbol{\pi} = (\pi_1, \pi_2, \dots, \pi_L)^T, \quad \text{where } \pi_l = P(\boldsymbol{\alpha}_i = \boldsymbol{\alpha}_l) \quad \text{and} \quad \sum_{l=1}^L \pi_l = 1
+        \boldsymbol{\pi} = (\pi_1, \pi_2, \dots, \pi_L)^T, \quad \text{where } \pi_l = P(\boldsymbol{\alpha}_i = \boldsymbol{\alpha}_l), \quad \pi_l > 0, \quad \text{and} \quad \sum_{l=1}^L \pi_l = 1
     \end{equation}
 
-    \item \textbf{Item Response:} Let $Y_{ij} \in \{0, 1\}$ be the observed response of examinee $i$ on item $j$, where $Y_{ij} = 1$ denotes a correct response and $0$ denotes an incorrect response.
+    \item \textbf{Item Response Vector:} Let $Y_{ij} \in \{0, 1\}$ represent the observed binary response of examinee $i$ on item $j$, where $Y_{ij} = 1$ denotes a correct response and $0$ denotes an incorrect response.
 \end{itemize}
 
-\section{Matrix Definitions}
+\subsubsection{Identifiability and $Q$-Matrix Completeness}
+To ensure parameter identifiability of the DINA model, the design matrix $\mathbf{Q} \in \{0, 1\}^{J \times K}$ must satisfy completeness conditions. Specifically, $\mathbf{Q}$ must contain at least two single-attribute vectors ($\mathbf{e}_k$) for each attribute $k \in \{1, \dots, K\}$, or equivalent reachability submatrices, preventing alias configurations among structural parameters $\boldsymbol{\pi}$ and item parameters.
 
-\begin{itemize}[leftmargin=*]
-    \item \textbf{Observed Response Matrix ($\mathbf{Y}$):}
-    \begin{equation}
-        \mathbf{Y} = [Y_{ij}]_{N \times J} \in \{0, 1\}^{N \times J}
-    \end{equation}
+\subsection{Matrix Operators and Deterministic Gate}
 
-    \item \textbf{Q-Matrix ($\mathbf{Q}$):} The expert-defined design matrix specifying attribute requirements for items:
+\begin{itemize}
+    \item \textbf{Observed Response Matrix ($\mathbf{Y}$):} $\mathbf{Y} = [Y_{ij}]_{N \times J} \in \{0, 1\}^{N \times J}$.
+    \item \textbf{$Q$-Matrix ($\mathbf{Q}$):} $\mathbf{Q} = [q_{jk}]_{J \times K} \in \{0, 1\}^{J \times K}$, where $q_{jk} = 1$ if item $j$ requires attribute $k$, and $0$ otherwise.
+    \item \textbf{Latent Profile Matrix ($\mathbf{A}$):} $\mathbf{A} = [\alpha_{lk}]_{L \times K} \in \{0, 1\}^{L \times K}$, enumerating all $L = 2^K$ latent profiles.
+    \item \textbf{Ideal Response Matrix ($\mathbf{H}$):} The $L \times J$ deterministic indicator matrix defining whether profile $l$ satisfies all attribute requirements for item $j$:
     \begin{equation}
-        \mathbf{Q} = [q_{jk}]_{J \times K} \in \{0, 1\}^{J \times K}
-    \end{equation}
-    where $q_{jk} = 1$ if item $j$ requires mastery of attribute $k$, and $q_{jk} = 0$ otherwise.
-
-    \item \textbf{Latent Profile Matrix ($\mathbf{A}$):} The enumeration of all $L = 2^K$ latent attribute profiles:
-    \begin{equation}
-        \mathbf{A} = [\alpha_{lk}]_{L \times K} \in \{0, 1\}^{L \times K}
-    \end{equation}
-
-    \item \textbf{Ideal Response Matrix ($\mathbf{H}$):} The $L \times J$ deterministic indicator matrix defining whether latent class $l$ meets all attribute requirements for item $j$:
-    \begin{equation}
-        \mathbf{H} = [H_{lj}]_{L \times J} \in \{0, 1\}^{L \times J}, \quad \text{where } H_{lj} = \prod_{k=1}^K \alpha_{lk}^{q_{jk}}
+        \mathbf{H} = [H_{lj}]_{L \times J} \in \{0, 1\}^{L \times J}, \quad \text{where } H_{lj} = \prod_{k=1}^K \alpha_{lk}^{q_{jk}} = I\left( \boldsymbol{\alpha}_l \succeq \mathbf{q}_j \right)
     \end{equation}
 \end{itemize}
 
-\section{The Deterministic Gate and Item Response Function (IRF)}
+\subsection{Item Response Function (IRF) and Stochastic Parameters}
 
-The DINA model assumes a non-compensatory (conjunctive) mechanism: an examinee must possess \textit{all} attributes required by an item to have a high probability of answering correctly.
-
-\subsection{Deterministic Latent Response \texorpdfstring{($\eta_{ij}$)}{(\textbackslash{}eta\_ij)}}
-
-The deterministic latent response $\eta_{ij}$ indicates whether examinee $i$ possesses all attributes required by item $j$:
+The deterministic latent response $\eta_{ij}$ for examinee $i$ on item $j$ is given by:
 \begin{equation}
-    \eta_{ij} = \prod_{k=1}^K \alpha_{ik}^{q_{jk}} = I\left( \boldsymbol{\alpha}_i \succeq \mathbf{q}_j \right)
+    \eta_{ij} = \prod_{k=1}^K \alpha_{ik}^{q_{jk}} \in \{0, 1\}
 \end{equation}
-where $\mathbf{q}_j = (q_{j1}, \dots, q_{jK})$ is the $j$-th row of $\mathbf{Q}$, and $I(\cdot)$ is the indicator function. Thus, $\eta_{ij} = 1$ if and only if $\alpha_{ik} \ge q_{jk}$ for all $k = 1, \dots, K$.
 
-\subsection{Stochastic Parameters and IRF Formulation}
-
-Real-world item responses deviate from deterministic predictions due to stochastic noise governed by two item parameters for each item $j$:
+Stochastic noise is modeled by two item-specific parameters:
 \begin{enumerate}
-    \item \textbf{Slipping parameter ($s\_j$):} The probability that an examinee who has mastered all required attributes ($\eta_{ij} = 1$) answers incorrectly:
-    \begin{equation}
-        s_j = P(Y_{ij} = 0 \mid \eta_{ij} = 1), \quad 0 < s_j < 1
-    \end{equation}
-
-    \item \textbf{Guessing parameter ($g\_j$):} The probability that an examinee who lacks at least one required attribute ($\eta_{ij} = 0$) answers correctly:
-    \begin{equation}
-        g_j = P(Y_{ij} = 1 \mid \eta_{ij} = 0), \quad 0 < g_j < 1
-    \end{equation}
+    \item \textbf{Slipping Parameter ($s_j$):} $s_j = P(Y_{ij} = 0 \mid \eta_{ij} = 1)$.
+    \item \textbf{Guessing Parameter ($g_j$):} $g_j = P(Y_{ij} = 1 \mid \eta_{ij} = 0)$.
 \end{enumerate}
 
-Monotonicity and identifiability dictate that $1 - s_j > g_j$ (i.e., $s_j + g_j < 1$).
+\textbf{Monotonicity Constraint:} To enforce psychometric validity and model identifiability, parameters must satisfy $1 - s_j > g_j \iff s_j + g_j < 1$.
 
-The Item Response Function (IRF) conditional on profile $\boldsymbol{\alpha}_i$ is defined as:
+The conditional success probability for latent class $l$ on item $j$ is:
 \begin{equation}
-    P(Y_{ij} = 1 \mid \boldsymbol{\alpha}_i, s_j, g_j) = (1 - s_j)^{\eta_{ij}} g_j^{1 - \eta_{ij}}
+    P_{jl} \equiv P(Y_{ij} = 1 \mid \boldsymbol{\alpha}_l, s_j, g_j) = (1 - s_j)^{H_{lj}} g_j^{1 - H_{lj}}
 \end{equation}
 
-Equivalently, the conditional probability for response $y \in \{0, 1\}$ is:
+The full conditional probability distribution for an observed response $y \in \{0, 1\}$ is:
 \begin{equation}
-    P(Y_{ij} = y \mid \boldsymbol{\alpha}_i, s_j, g_j) = \left[ (1 - s_j)^{\eta_{ij}} g_j^{1 - \eta_{ij}} \right]^y \left[ s_j^{\eta_{ij}} (1 - g_j)^{1 - \eta_{ij}} \right]^{1 - y}
+    P(Y_{ij} = y \mid \boldsymbol{\alpha}_l, s_j, g_j) = P_{jl}^y (1 - P_{jl})^{1 - y} = \left[ (1 - s_j)^{H_{lj}} g_j^{1 - H_{lj}} \right]^y \left[ s_j^{H_{lj}} (1 - g_j)^{1 - H_{lj}} \right]^{1 - y}
 \end{equation}
 
-\section{Likelihood Functions}
+\subsection{Likelihood Structure and Log-Domain Formulations}
 
-Under local independence, item responses are conditionally independent given an examinee's latent attribute vector $\boldsymbol{\alpha}_i$.
+Under conditional local independence:
 
-\subsection{Individual Conditional Likelihood}
-\begin{align}
-    P(\mathbf{Y}_i \mid \boldsymbol{\alpha}_l, \boldsymbol{s}, \boldsymbol{g}) &= \prod_{j=1}^J P(Y_{ij} \mid \boldsymbol{\alpha}_l, s_j, g_j) \nonumber \\
-    &= \prod_{j=1}^J \left[ (1 - s_j)^{H_{lj}} g_j^{1 - H_{lj}} \right]^{Y_{ij}} \left[ s_j^{H_{lj}} (1 - g_j)^{1 - H_{lj}} \right]^{1 - Y_{ij}}
-\end{align}
-
-\subsection{Marginal Likelihood for Person \texorpdfstring{$i$}{i}}
-
-Marginalizing over all $L$ latent classes yields:
+\subsubsection{Individual Log-Likelihood Conditional on Latent Class}
 \begin{equation}
-    P(\mathbf{Y}_i \mid \boldsymbol{s}, \boldsymbol{g}, \boldsymbol{\pi}) = \sum_{l=1}^L \pi_l P(\mathbf{Y}_i \mid \boldsymbol{\alpha}_l, \boldsymbol{s}, \boldsymbol{g})
+    \log P(\mathbf{Y}_i \mid \boldsymbol{\alpha}_l, \boldsymbol{s}, \boldsymbol{g}) = \sum_{j=1}^J \left[ Y_{ij} \log P_{jl} + (1 - Y_{ij}) \log(1 - P_{jl}) \right]
 \end{equation}
 
-\subsection{Observed Data Log-Likelihood}
+\subsubsection{Marginal Log-Likelihood}
+Marginalizing over all $L$ latent classes:
+\begin{equation}
+    \log P(\mathbf{Y}_i \mid \boldsymbol{s}, \boldsymbol{g}, \boldsymbol{\pi}) = \log \left( \sum_{l=1}^L \pi_l \exp \left( \log P(\mathbf{Y}_i \mid \boldsymbol{\alpha}_l, \boldsymbol{s}, \boldsymbol{g}) \right) \right)
+\end{equation}
 
-Assuming independent and identically distributed examinees:
+The sample log-likelihood across $N$ independent examinees is:
 \begin{equation}
     \log L(\boldsymbol{s}, \boldsymbol{g}, \boldsymbol{\pi} \mid \mathbf{Y}) = \sum_{i=1}^N \log \left( \sum_{l=1}^L \pi_l \prod_{j=1}^J P(Y_{ij} \mid \boldsymbol{\alpha}_l, s_j, g_j) \right)
 \end{equation}
@@ -135,7 +104,6 @@ Assuming independent and identically distributed examinees:
 
 
 
-\section{Expectation-Maximization (EM) Algorithm for MLE}
 
 
 
@@ -144,7 +112,50 @@ Assuming independent and identically distributed examinees:
 
 
 
-\section{Markov Chain Monte Carlo (MCMC) Estimation}
+\section{Theoretical Proofs \& Statistical Foundations of DCM Estimation}
+
+\subsection{Convergence and Monotonicity Proof of the EM Algorithm (MLE)}
+
+Let $\boldsymbol{\theta} = (\boldsymbol{\pi}, \mathbf{s}, \mathbf{g})$ denote the full parameter vector, and let $L(\boldsymbol{\theta}) = \log P(\mathbf{Y} \mid \boldsymbol{\theta})$ be the observed-data marginal log-likelihood:
+\begin{equation}
+L(\boldsymbol{\theta}) = \sum_{i=1}^N \log \left( \sum_{l=1}^L \pi_l P(\mathbf{Y}_i \mid \boldsymbol{\alpha}_l, \mathbf{s}, \mathbf{g}) \right)
+\end{equation}
+
+\begin{theorem}[Monotonicity of Likelihood Updates]
+For any sequence of parameter estimates $\{\boldsymbol{\theta}^{(t)}\}_{t=0}^\infty$ generated by the EM updates, the observed marginal log-likelihood is monotonically non-decreasing:
+\begin{equation}
+L(\boldsymbol{\theta}^{(t+1)}) \ge L(\boldsymbol{\theta}^{(t)})
+\end{equation}
+\end{theorem}
+
+\begin{proof}
+Consider the log-likelihood difference between iteration $t+1$ and iteration $t$:
+\begin{align}
+L(\boldsymbol{\theta}) - L(\boldsymbol{\theta}^{(t)}) &= \sum_{i=1}^N \log \frac{P(\mathbf{Y}_i \mid \boldsymbol{\theta})}{P(\mathbf{Y}_i \mid \boldsymbol{\theta}^{(t)})} \\
+&= \sum_{i=1}^N \log \left( \sum_{l=1}^L \frac{P(\mathbf{Y}_i, \boldsymbol{\alpha}_l \mid \boldsymbol{\theta})}{P(\mathbf{Y}_i \mid \boldsymbol{\theta}^{(t)})} \right) \\
+&= \sum_{i=1}^N \log \left( \sum_{l=1}^L w_{il}^{(t)} \frac{P(\mathbf{Y}_i, \boldsymbol{\alpha}_l \mid \boldsymbol{\theta})}{w_{il}^{(t)} P(\mathbf{Y}_i \mid \boldsymbol{\theta}^{(t)})} \right)
+\end{align}
+where $w_{il}^{(t)} = P(\boldsymbol{\alpha}_l \mid \mathbf{Y}_i, \boldsymbol{\theta}^{(t)}) = \frac{P(\mathbf{Y}_i, \boldsymbol{\alpha}_l \mid \boldsymbol{\theta}^{(t)})}{P(\mathbf{Y}_i \mid \boldsymbol{\theta}^{(t)})}$ is the posterior class probability evaluated at iteration $t$.
+
+Applying Jensen's Inequality ($\log \mathbb{E}[X] \ge \mathbb{E}[\log X]$) to the concave logarithm function yields:
+\begin{align}
+L(\boldsymbol{\theta}) - L(\boldsymbol{\theta}^{(t)}) &\ge \sum_{i=1}^N \sum_{l=1}^L w_{il}^{(t)} \log \left( \frac{P(\mathbf{Y}_i, \boldsymbol{\alpha}_l \mid \boldsymbol{\theta})}{w_{il}^{(t)} P(\mathbf{Y}_i \mid \boldsymbol{\theta}^{(t)})} \right) \\
+&= \sum_{i=1}^N \sum_{l=1}^L w_{il}^{(t)} \log P(\mathbf{Y}_i, \boldsymbol{\alpha}_l \mid \boldsymbol{\theta}) - \sum_{i=1}^N \sum_{l=1}^L w_{il}^{(t)} \log \left( w_{il}^{(t)} P(\mathbf{Y}_i \mid \boldsymbol{\theta}^{(t)}) \right) \\
+&= Q(\boldsymbol{\theta} \mid \boldsymbol{\theta}^{(t)}) - Q(\boldsymbol{\theta}^{(t)} \mid \boldsymbol{\theta}^{(t)})
+\end{align}
+where $Q(\boldsymbol{\theta} \mid \boldsymbol{\theta}^{(t)}) = \mathbb{E}_{\mathbf{Z} \mid \mathbf{Y}, \boldsymbol{\theta}^{(t)}} [\log P(\mathbf{Y}, \mathbf{Z} \mid \boldsymbol{\theta})]$ is the expected complete-data log-likelihood.
+
+Thus, we define the surrogate bound function $B(\boldsymbol{\theta} \mid \boldsymbol{\theta}^{(t)}) \equiv Q(\boldsymbol{\theta} \mid \boldsymbol{\theta}^{(t)}) - Q(\boldsymbol{\theta}^{(t)} \mid \boldsymbol{\theta}^{(t)}) + L(\boldsymbol{\theta}^{(t)})$, satisfying:
+\begin{equation}
+L(\boldsymbol{\theta}) \ge B(\boldsymbol{\theta} \mid \boldsymbol{\theta}^{(t)}) \quad \text{and} \quad L(\boldsymbol{\theta}^{(t)}) = B(\boldsymbol{\theta}^{(t)} \mid \boldsymbol{\theta}^{(t)})
+\end{equation}
+
+By selecting $\boldsymbol{\theta}^{(t+1)} = \arg\max_{\boldsymbol{\theta}} Q(\boldsymbol{\theta} \mid \boldsymbol{\theta}^{(t)})$, we guarantee:
+\begin{equation}
+L(\boldsymbol{\theta}^{(t+1)}) \ge B(\boldsymbol{\theta}^{(t+1)} \mid \boldsymbol{\theta}^{(t)}) \ge B(\boldsymbol{\theta}^{(t)} \mid \boldsymbol{\theta}^{(t)}) = L(\boldsymbol{\theta}^{(t)})
+\end{equation}
+By the Monotone Convergence Theorem, since $L(\boldsymbol{\theta})$ is bounded above by 0 for discrete probabilities, the sequence $\{L(\boldsymbol{\theta}^{(t)})\}_t$ converges to a stationary point $\boldsymbol{\theta}^*$.
+\end{proof}
 
 
 
@@ -155,10 +166,125 @@ Assuming independent and identically distributed examinees:
 
 
 
-\section{Maximum A Posteriori (MAP) Estimation}
+\subsection{MCMC Gibbs Sampling: Full Conditional Derivations and Ergodic Convergence Proof}
+
+Let $\boldsymbol{\Omega} = (\boldsymbol{\alpha}_1, \dots, \boldsymbol{\alpha}_N, \boldsymbol{\pi}, \mathbf{s}, \mathbf{g})$ denote the full set of latent variables and parameters. The joint posterior distribution given binary response matrix $\mathbf{Y}$ and hyperparameter priors $\mathbf{d}, \mathbf{a}_s, \mathbf{b}_s, \mathbf{a}_g, \mathbf{b}_g$ is:
+\begin{equation}
+p(\boldsymbol{\Omega} \mid \mathbf{Y}) \propto \left[ \prod_{i=1}^N \prod_{j=1}^J P(Y_{ij} \mid \boldsymbol{\alpha}_i, s_j, g_j) \right] \left[ \prod_{i=1}^N p(\boldsymbol{\alpha}_i \mid \boldsymbol{\pi}) \right] p(\boldsymbol{\pi}) p(\mathbf{s}) p(\mathbf{g})
+\end{equation}
+
+\subsubsection{Derivation of Full Conditional Distributions}
+
+\begin{enumerate}
+    \item \textbf{Individual Latent Class Vector $\boldsymbol{\alpha}_i$}:
+    For person $i$, conditional on all current parameters, $\boldsymbol{\alpha}_i$ follows a Categorical distribution over profile space $\{1, \dots, L\}$:
+    \begin{equation}
+    P(\boldsymbol{\alpha}_i = \boldsymbol{\alpha}_l \mid \mathbf{Y}_i, \boldsymbol{\pi}, \mathbf{s}, \mathbf{g}) = \frac{\pi_l \prod_{j=1}^J P(Y_{ij} \mid \boldsymbol{\alpha}_l, s_j, g_j)}{\sum_{m=1}^L \pi_m \prod_{j=1}^J P(Y_{ij} \mid \boldsymbol{\alpha}_m, s_j, g_j)}
+    \end{equation}
+
+    \item \textbf{Structural Mixing Proportion Vector $\boldsymbol{\pi}$}:
+    Under conjugate Dirichlet prior $\boldsymbol{\pi} \sim \text{Dirichlet}(d_1, \dots, d_L)$:
+    \begin{equation}
+    p(\boldsymbol{\pi} \mid \boldsymbol{\alpha}_1, \dots, \boldsymbol{\alpha}_N) \propto \prod_{l=1}^L \pi_l^{d_l - 1} \cdot \prod_{i=1}^N \prod_{l=1}^L \pi_l^{I(\boldsymbol{\alpha}_i = \boldsymbol{\alpha}_l)} = \prod_{l=1}^L \pi_l^{n_l + d_l - 1}
+    \end{equation}
+    where $n_l = \sum_{i=1}^N I(\boldsymbol{\alpha}_i = \boldsymbol{\alpha}_l)$. Thus, $\boldsymbol{\pi} \mid \boldsymbol{\alpha} \sim \text{Dirichlet}(n_1 + d_1, \dots, n_L + d_L)$.
+
+    \item \textbf{Item Slipping and Guessing Parameters $(s_j, g_j)$}:
+    Let $\eta_{ij}(\boldsymbol{\alpha}_i, \mathbf{Q}_j)$ be the deterministic ideal response indicator (e.g., $\eta_{ij} = \prod_{k=1}^K \alpha_{ik}^{q_{jk}}$ for DINA).
+    The conditional distribution for $s_j$ given item $j$'s responses among masteries ($\eta_{ij} = 1$) is:
+    \begin{equation}
+    p(s_j \mid \mathbf{Y}_{\cdot j}, \boldsymbol{\alpha}) \propto s_j^{a_{sj} - 1} (1 - s_j)^{b_{sj} - 1} \cdot \prod_{i: \eta_{ij}=1} s_j^{1 - Y_{ij}} (1 - s_j)^{Y_{ij}}
+    \end{equation}
+    Thus, $s_j \mid \mathbf{Y}, \boldsymbol{\alpha} \sim \text{Beta}\left(a_{sj} + \sum_{i: \eta_{ij}=1}(1 - Y_{ij}), \; b_{sj} + \sum_{i: \eta_{ij}=1} Y_{ij}\right)$.
+    
+    Similarly, for guessing parameter $g_j$ among non-masteries ($\eta_{ij} = 0$):
+    \begin{equation}
+    g_j \mid \mathbf{Y}, \boldsymbol{\alpha} \sim \text{Beta}\left(a_{gj} + \sum_{i: \eta_{ij}=0} Y_{ij}, \; b_{gj} + \sum_{i: \eta_{ij}=0} (1 - Y_{ij})\right)
+    \end{equation}
+\end{enumerate}
+
+\subsubsection{Proof of Markov Chain Stationary Distribution and Ergodicity}
+
+\begin{theorem}[Stationarity and Consistency of Gibbs Estimates]
+The Markov chain $\{\boldsymbol{\Omega}^{(t)}\}_{t=1}^M$ generated by sequential sampling from the full conditional distributions converges in distribution to the exact target joint posterior $p(\boldsymbol{\Omega} \mid \mathbf{Y})$. Furthermore, the Expected A Posteriori (EAP) sample mean converges almost surely to the true posterior expectation.
+\end{theorem}
+
+\begin{proof}
+
+\begin{enumerate}
+    \item \textbf{Detailed Balance and Stationarity}:
+    Let $K(\boldsymbol{\Omega}' \mid \boldsymbol{\Omega})$ denote the transition kernel of the systematic scan Gibbs sampler updating components $\boldsymbol{\Omega}_1, \dots, \boldsymbol{\Omega}_K$ sequentially. For component $k$, the transition kernel is $K_k(\boldsymbol{\Omega}' \mid \boldsymbol{\Omega}) = p(\boldsymbol{\Omega}_k' \mid \boldsymbol{\Omega}_{-k}) \delta(\boldsymbol{\Omega}_{-k}' - \boldsymbol{\Omega}_{-k})$.
+    Verifying detailed balance for sub-kernel $K_k$:
+    \begin{align}
+    p(\boldsymbol{\Omega} \mid \mathbf{Y}) K_k(\boldsymbol{\Omega}' \mid \boldsymbol{\Omega}) &= p(\boldsymbol{\Omega}_k, \boldsymbol{\Omega}_{-k} \mid \mathbf{Y}) p(\boldsymbol{\Omega}_k' \mid \boldsymbol{\Omega}_{-k}) \\
+    &= p(\boldsymbol{\Omega}_{-k} \mid \mathbf{Y}) p(\boldsymbol{\Omega}_k \mid \boldsymbol{\Omega}_{-k}) p(\boldsymbol{\Omega}_k' \mid \boldsymbol{\Omega}_{-k}) \\
+    &= p(\boldsymbol{\Omega}_k', \boldsymbol{\Omega}_{-k} \mid \mathbf{Y}) p(\boldsymbol{\Omega}_k \mid \boldsymbol{\Omega}_{-k}) \\
+    &= p(\boldsymbol{\Omega}' \mid \mathbf{Y}) K_k(\boldsymbol{\Omega} \mid \boldsymbol{\Omega}')
+    \end{align}
+    Integrating over $\boldsymbol{\Omega}$ proves that $p(\boldsymbol{\Omega} \mid \mathbf{Y})$ is an invariant (stationary) measure under $K_k$, and consequently under the full transition operator $K = K_1 \circ K_2 \circ \dots \circ K_K$.
+
+    \item \textbf{Irreducibility, Aperiodicity, and Ergodicity}:
+    Because all full conditionals belong to standard parametric families (Categorical, Dirichlet, Beta) with support bounded away from zero on their respective constrained domains $\Delta^{L-1} \times (0,1)^{2J}$, $p(\boldsymbol{\Omega}' \mid \boldsymbol{\Omega}) > 0$ everywhere on the parameter state space $\mathbf{\Theta}$.
+    Hence, the Markov chain is Harris irreducible and aperiodic. By the \textbf{Ergodic Theorem for Markov Chains}, for any integrable function $h(\boldsymbol{\Omega})$ with $\mathbb{E}_{p(\boldsymbol{\Omega}\mid\mathbf{Y})}[|h(\boldsymbol{\Omega})|] < \infty$:
+    \begin{equation}
+    \lim_{M \to \infty} \frac{1}{M} \sum_{t=1}^M h\left(\boldsymbol{\Omega}^{(t)}\right) \xrightarrow{\text{a.s.}} \mathbb{E}_{p(\boldsymbol{\Omega} \mid \mathbf{Y})}[h(\boldsymbol{\Omega})] = \int_{\mathbf{\Theta}} h(\boldsymbol{\Omega}) p(\boldsymbol{\Omega} \mid \mathbf{Y}) d\boldsymbol{\Omega}
+    \end{equation}
+    This guarantees that MCMC EAP estimates $\hat{\boldsymbol{\theta}}_{\text{EAP}} = \frac{1}{M} \sum_{t=1}^M \boldsymbol{\theta}^{(t)}$ are asymptotically unbiased, consistent, and minimize expected posterior Bayes risk under squared error loss.
+\end{enumerate}
+\end{proof}
 
 
 
-\section{References}
+
+
+
+
+
+
+
+
+
+\subsection{Regularization, Parameter Bounds, and Well-Posedness of MAP Updates}
+
+In small samples ($N < 100$), standard MLE estimates suffer from boundary non-identifiability or zero-denominator failures when $N_{j1}^{(t)} = 0$ or $N_{j0}^{(t)} = 0$.
+
+\begin{theorem}[Interior Regularization and Bound Preservation]
+Under Beta priors $s_j \sim \text{Beta}(a_{sj}, b_{sj})$ and $g_j \sim \text{Beta}(a_{gj}, b_{gj})$ with shape parameters $a_{sj}, b_{sj}, a_{gj}, b_{gj} > 1$, the MAP M-step updates for item parameters strictly satisfy $s_j^{(t+1)} \in (0, 1)$ and $g_j^{(t+1)} \in (0, 1)$ for any expected counts $N_{j1}^{(t)}, N_{j0}^{(t)} \ge 0$.
+\end{theorem}
+
+\begin{proof}
+The penalized Objective $Q_{\text{MAP}}(s_j \mid \boldsymbol{\theta}^{(t)})$ for item parameter $s_j$ in the M-step isolated from other parameters is:
+\begin{equation}
+Q_{\text{MAP}}(s_j) = (N_{j1}^{(t)} - R_{j1}^{(t)}) \log s_j + R_{j1}^{(t)} \log(1 - s_j) + (a_{sj} - 1) \log s_j + (b_{sj} - 1) \log(1 - s_j) + C
+\end{equation}
+Setting the first derivative with respect to $s_j$ to zero:
+\begin{equation}
+\frac{\partial Q_{\text{MAP}}}{\partial s_j} = \frac{N_{j1}^{(t)} - R_{j1}^{(t)} + a_{sj} - 1}{s_j} - \frac{R_{j1}^{(t)} + b_{sj} - 1}{1 - s_j} = 0
+\end{equation}
+Solving for $s_j$ directly yields the closed-form update:
+\begin{equation}
+s_j^{(t+1)} = \frac{N_{j1}^{(t)} - R_{j1}^{(t)} + a_{sj} - 1}{N_{j1}^{(t)} + a_{sj} + b_{sj} - 2}
+\end{equation}
+
+By definition of conditional expectations, $0 \le R_{j1}^{(t)} \le N_{j1}^{(t)}$. Thus:
+\begin{equation}
+N_{j1}^{(t)} - R_{j1}^{(t)} \ge 0 \implies N_{j1}^{(t)} - R_{j1}^{(t)} + a_{sj} - 1 > 0 \quad (\text{since } a_{sj} > 1)
+\end{equation}
+Similarly, for the denominator:
+\begin{equation}
+N_{j1}^{(t)} + a_{sj} + b_{sj} - 2 = (N_{j1}^{(t)} - R_{j1}^{(t)} + a_{sj} - 1) + (R_{j1}^{(t)} + b_{sj} - 1) > N_{j1}^{(t)} - R_{j1}^{(t)} + a_{sj} - 1
+\end{equation}
+Therefore, $0 < s_j^{(t+1)} < 1$ holds strictly for all $N_{j1}^{(t)} \ge 0$. The proof for $g_j^{(t+1)} \in (0,1)$ follows analogously.
+\end{proof}
+
+
+
+
+
+
+
+
+
+
 
 \end{document}

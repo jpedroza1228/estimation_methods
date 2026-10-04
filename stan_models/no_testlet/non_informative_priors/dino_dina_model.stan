@@ -3,16 +3,16 @@ data {
   int<lower=1> I;
   int<lower=1> C;
   int<lower=1> K;
-  matrix<lower=0,upper=1> [J,I] Y;
-  matrix<lower=0,upper=1> [I,K] Q;
-  matrix<lower=0,upper=1> [C,K] alpha;
-  matrix<lower=0,upper=1> [I,C] xi;
+  matrix<lower=0,upper=1> [J,I] Y; 
+  matrix<lower=0,upper=1> [I,K] Q; 
+  matrix<lower=0,upper=1> [C,K] alpha; 
+  matrix<lower=0,upper=1> [I,C] xi; // response probabilities
 }
 
 parameters {
-  simplex[C] nu;
-  vector<lower=0, upper=1>[I] slip;
-  vector<lower=0, upper=1>[I] guess;
+  simplex[C] nu; //structural mixing proportions
+  vector<lower=0, upper=1>[I] slip; // slipping parameters
+  vector<lower=0, upper=1>[I] guess; // guessing parameters
 }
 
 transformed parameters {
@@ -23,29 +23,31 @@ transformed parameters {
 
   for (c in 1:C){
     for (i in 1:I){
-      pi[i,c] = pow((1 - slip[i]), xi[i,c]) *
+      pi[i,c] = pow((1 - slip[i]), xi[i,c]) * // based on parameters
       pow(guess[i], (1 - xi[i,c]));
     }
   }
 }
 
-model{
+
+
+model{ // Specify the likelihood function
   array[C] real ps;
   array[I] real eta;
 
   for (i in 1:I){
-    slip[i] ~ beta(1, 1);
-    guess[i] ~ beta(1, 1);
+    slip[i] ~ beta(1, 1); // slipping parameters
+    guess[i] ~ beta(1, 1); // guessing parameters
   }
   for (j in 1:J){
     for (c in 1:C){
       for (i in 1:I){
-        real p = fmin(fmax(pi[i,c], 1e-9), (1 - 1e-9));
-        eta[i] = Y[j,i] * log(p) + (1 - Y[j,i]) * log1m(p);
+        real p = fmin(fmax(pi[i,c], 1e-9), (1 - 1e-9)); 
+        eta[i] = Y[j,i] * log(p) + (1 - Y[j,i]) * log1m(p); 
       }
-      ps[c] = log_nu[c] + sum(eta);
+      ps[c] = log_nu[c] + sum(eta); // Individual Log-likelihood Conditional on Latent Class
     }
-    target += log_sum_exp(ps);
+    target += log_sum_exp(ps); // sample log-likelihood across N independent examinees
   }
 }
 
@@ -58,6 +60,8 @@ generated quantities {
   array[C] real prob_attr_class;
   matrix[J,I] y_rep;
 
+
+  // Computes posterior probabilities
   for (j in 1:J){
    for (c in 1:C){
      for(i in 1:I){
