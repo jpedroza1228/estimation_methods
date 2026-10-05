@@ -74,3 +74,19 @@ models_theory/dina_model.aux
 models_theory/dina_model.log
 models_theory/dina_model.out
 .continue/
+
+# reports
+reports/
+
+# Ignore .typ
+*.typ
+
+# Ignore mle/.quarto/
+.quarto/
+*.quarto_ipynb
+*.quarto_ipynb_1
+*.joblib
+
+# Ignore Stan Cache
+dino_dina_model
+dino_dina_prior
