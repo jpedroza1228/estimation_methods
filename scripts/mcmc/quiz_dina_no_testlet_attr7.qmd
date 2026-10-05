@@ -1,6 +1,6 @@
 ---
 title: "DCM Assessment Report"
-subtitle: "STAT 134 Su26 - Quiz 2"
+subtitle: "STAT 134 Su25 - Quiz 5"
 jupyter: .venv
 execute:
   warning: false
