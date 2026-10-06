@@ -56,13 +56,12 @@ pn.theme_set(pn.theme_classic())
 
 data_directory = 'data/'
 q_directory = 'q_matrix/'
-stan_directory = 'stan_models/no_testlet/non_informative_priors/'
+# stan_directory = 'stan_models/no_testlet/non_informative_priors/'
+stan_directory = 'stan_models/no_testlet/mle_no_priors/'
 diagnose_directory = 'reports/diagnostics/'
 
 os.makedirs(here(diagnose_directory), exist_ok=True)
 os.makedirs(here('reports/2026/quiz2/'), exist_ok=True)
-
-
 ```
 
 # Data Ingestion & Preprocessing
@@ -184,7 +183,7 @@ stan_dict = {
 #| label: model execution
 #| output: false
 
-file = os.path.join(here(f'{stan_directory}dino_dina_model.stan'))
+file = os.path.join(here(f'{stan_directory}mle_dino_dina_model.stan'))
 model = CmdStanModel(stan_file=file, compile='force', cpp_options={'STAN_THREADS': 'TRUE'})
 
 np.random.seed(7102026)
@@ -196,9 +195,9 @@ fit = model.optimize(
     show_console=False
 )
 
-joblib.dump([model, fit],
-            here(f'{stan_directory}testlet_dino_dina_mle.joblib'),
-            compress=3)
+# joblib.dump([model, fit],
+#             here(f'{stan_directory}testlet_dino_dina_mle.joblib'),
+#             compress=3)
 
 
 ```
@@ -381,6 +380,24 @@ gt(attr_w_export.drop(columns='anon_id').head(15)).tab_header(
 # Item-Level Slipping & Guessing
 
 Point estimates for Slipping ($s$) and Guessing ($g$) mapped dynamically across all items. A dumbbell structure flags problematic items where the guessing parameter exceeds the non-guessing parameter, or where slipping is unusually high.
+
+```{python}
+#| label: plot-slipping-guessing
+
+(
+  pn.ggplot(sgavg, pn.aes(x='factor(item)', y='estimate'))
+  + pn.geom_col(pn.aes(fill='type'), alpha=0.9)
+  + pn.facet_wrap('type')
+  + pn.coord_flip()
+  + pn.scale_y_continuous(limits=[0, 1], breaks=np.arange(0, 1.1, .2))
+  + pn.labs(title='Item-Level Slipping & Guessing Profiles',
+            x='Item Index',
+            y='Probability Estimate',
+            color='Parameter')  
+  + pn.theme(legend_position='bottom')
+)
+
+```
 
 ```{python}
 #| label: plot-slipping-guessing-dumbbell
