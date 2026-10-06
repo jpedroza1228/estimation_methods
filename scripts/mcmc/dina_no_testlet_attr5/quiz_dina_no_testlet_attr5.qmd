@@ -1,7 +1,7 @@
 ---
 title: "DCM Assessment Report"
-subtitle: "STAT 134 Su26 - Quiz 2"
-jupyter: .venv
+subtitle: "STAT 134 Su26 - Quiz 5"
+jupyter: estimation_methods_venv
 execute:
   warning: false
   message: false
@@ -23,13 +23,11 @@ format:
 threshold = .8
 model_type = 'DINA'
 
-attr1 = 'expect_weight_avg'
-attr2 = 'expect_fun'
-attr3 = 'def_var'
-attr4 = 'prop_expect'
-attr5 = 'expect_famous_dist'
-attr6 = 'cond_expect'
-attr7 = 'prop_var'
+attr1 = 'expect_fun'
+attr2 = 'def_var'
+attr3 = 'prop_expect'
+attr4 = 'expect_famous_dist'
+attr5 = 'prop_var'
 # attr8 = 'total_var' #typo so we're not using question 35
 ```
 
@@ -58,10 +56,16 @@ pd.set_option('display.max_columns', None)
 matplotlib.rcParams.update({'savefig.bbox': 'tight'})
 pn.theme_set(pn.theme_classic())
 
-data_directory = 'data/'
-q_directory = 'q_matrix/'
-stan_directory = 'stan_models/no_testlet/non_informative_priors/'
-diagnose_directory = 'reports/diagnostics/'
+data_directory = 'data/stat_134_2025_quiz5.csv'
+q_directory = 'q_matrix/quiz5_q_5attr.csv'
+stan_model_directory = 'stan_models/no_testlet/non_informative_priors/dino_dina_model.stan'
+stan_prior_directory = 'stan_models/no_testlet/non_informative_priors/dino_dina_prior.stan'
+diagnostics_directory = 'data/diagnostics/dina_no_testlet_attr5_model_diagnostics.csv'
+save_model_joblib_directory = 'data/joblib_models/no_inform_prior_no_testlet_5attr_dina_model.joblib'
+save_prior_joblib_directory = 'data/joblib_models/no_inform_prior_no_testlet_5attr_dina_prior.joblib'
+item_ppp_directory = 'data/item_ppp/no_inform_no_testlet_attr5_dina.csv'
+resp_proficieny_raw_list_directory = 'data/mastery_lists/resp_prof_raw_no_inform_no_testlet_attr5_dina.csv'
+resp_proficiency_list_directory = 'data/mastery_lists/respondent_proficiency_list_attr5.csv'
 ```
 
 # Creating Necessary DataFrames & Matrices
@@ -69,8 +73,8 @@ diagnose_directory = 'reports/diagnostics/'
 ```{python}
 #| label: DataFrame & Q-Matrix
 
-df = pd.read_csv(here(f'{data_directory}stat_134_2025_quiz5.csv')).drop(columns = 'Unnamed: 0')
-q = pd.read_csv(here(f'{q_directory}quiz5_q_updated.csv')).clean_names(case_type = 'snake').drop(columns = 'unnamed_0')
+df = pd.read_csv(here(f'{data_directory}')).drop(columns = 'Unnamed: 0')
+q = pd.read_csv(here(f'{q_directory}')).clean_names(case_type = 'snake').drop(columns = 'unnamed_0')
 q['item'] = ['item' + str(i) for i in q['item']]
 
 # if no testlet, run this code
@@ -88,7 +92,7 @@ df.head()
 
 ```{python}
 # dropping the final skill because only used once and no variation
-q = q.drop(columns = 'total_variance')
+# q = q.drop(columns = 'total_variance')
 q = q.loc[q['item'] != 'item35']
 q.head()
 ```
@@ -98,21 +102,20 @@ q.head()
 ```{python}
 #| label: Attribute profile matrix
 
-alpha = pd.DataFrame([(a, b, c, d, e, f, g) for a in np.arange(2) for b in np.arange(2) for c in np.arange(2) for d in np.arange(2) for e in np.arange(2) for f in np.arange(2) for g in np.arange(2)])
+alpha = pd.DataFrame([(a, b, c, d, e) for a in np.arange(2) for b in np.arange(2) for c in np.arange(2) for d in np.arange(2) for e in np.arange(2)])
       
 alpha = alpha.rename(columns = {0: 'attr1',
                                 1: 'attr2',
                                 2: 'attr3',
                                 3: 'attr4',
-                                4: 'attr5',
-                                5: 'attr6',
-                                6: 'attr7'})
+                                4: 'attr5'})
 
 alpha['class_label'] = alpha.astype(int).astype(str).agg(''.join, axis = 1)
 alpha = alpha.reset_index()
 alpha['index'] = alpha['index'] + 1
 
-alpha.head()
+print(alpha.head())
+print(alpha.shape)
 ```
 
 ## Global Attribute Mastery Indicator Matrix
@@ -156,7 +159,7 @@ stan_dict = {
 #| label: prior-only and model; saved diagnostics
 #| output: false
 
-file = os.path.join(here(f'{stan_directory}dino_dina_model.stan'))
+file = os.path.join(here(f'{stan_model_directory}'))
 model = CmdStanModel(stan_file = file,
                      cpp_options = {'STAN_THREADS': 'TRUE'})
 
@@ -178,13 +181,13 @@ fit = model.sample(data = stan_dict,
                      iter_sampling = 2000)
 
 diagnose = pd.DataFrame(fit.summary())
-diagnose.to_csv(here(f'{diagnose_directory}dina_no_testlet_attr7_model_diagnostics.csv'))
+diagnose.to_csv(here(f'{diagnostics_directory}'))
                    
 joblib.dump([model, fit],
-            here(f'{stan_directory}testlet_dino_dina_model.joblib'),
+            here(f'{save_model_joblib_directory}'),
             compress = 3)
 
-prior_file = os.path.join(here(f'{stan_directory}dino_dina_prior.stan'))
+prior_file = os.path.join(here(f'{stan_prior_directory}'))
 pmodel = CmdStanModel(stan_file = prior_file,
                        cpp_options = {'STAN_THREADS': 'TRUE'})
 
@@ -198,57 +201,8 @@ pfit = pmodel.sample(data = stan_dict,
                      iter_sampling = 2000)
 
 joblib.dump([pmodel, pfit],
-            here(f'{stan_directory}testlet_dino_dina_prior.joblib'),
+            here(f'{save_prior_joblib_directory}'),
             compress = 3)
-```
-
-```{python}
-#| label: OLD; keeping for reference
-#| output: false
-#| eval: false
-
-if Path(here(f'{stan_directory}quiz_dina_no_testlet_attr7.joblib')).exists():
-  model, fit = joblib.load(here(f'{stan_directory}quiz2_dino.joblib'))
-  pmodel, pfit = joblib.load(here(f'{stan_directory}quiz2_dino_prior.joblib'))
-
-else:
-  file = os.path.join(here(f'{stan_directory}quiz2_model.stan'))
-  model = CmdStanModel(stan_file = file,
-                       cpp_options = {'STAN_THREADS': 'TRUE'})
-  
-  np.random.seed(7102026)
-  fit = model.sample(data = stan_dict,
-                     show_console = True,
-                     chains = 4,
-                     parallel_chains = 4,
-                     adapt_delta = .95,
-                     iter_warmup = 2000,
-                     iter_sampling = 2000)
-  # fit = model.optimize(data = stan_dict, show_console = True) # MLE/MAP
-
-  diagnose = pd.DataFrame(fit.summary())
-  diagnose.to_csv(here(f'{diagnose_directory}quiz2_model_diagnostics.csv'))
-                     
-  joblib.dump([model, fit],
-              here(f'{stan_directory}quiz2_dino.joblib'),
-              compress = 3)
-  
-  prior_file = os.path.join(here(f'{stan_directory}quiz2_prior.stan'))
-  pmodel = CmdStanModel(stan_file = prior_file,
-                         cpp_options = {'STAN_THREADS': 'TRUE'})
-
-  np.random.seed(7102026)
-  pfit = pmodel.sample(data = stan_dict,
-                       show_console = True,
-                       chains = 4,
-                       parallel_chains = 4,
-                       # adapt_delta = .95,
-                       iter_warmup = 2000,
-                       iter_sampling = 2000)
-
-  joblib.dump([pmodel, pfit],
-              here(f'{stan_directory}quiz2_dino_prior.joblib'),
-              compress = 3)
 ```
 
 ```{python}
@@ -303,9 +257,10 @@ There are a few options that you can try out if your model did not work accordin
 More information about diagnostics can be found [here](https://mc-stan.org/learn-stan/diagnostics-warnings.html). 
 
 ```{python}
-#| label: Top 5 Diagnostics
+#| eval: false
+#| label: Top 5 Diagnostics (Needs to be fixed)
 
-if Path(here(f'{stan_directory}quiz2_dino.joblib')).exists():
+if Path(here('scripts/mcmc/dina_no_testlet_attr5/quiz2_dino.joblib')).exists():
   None
 else:
   gt(diagnose.sort_values('R_hat', ascending = False)[['ESS_bulk', 'ESS_tail', 'ESS_bulk/s', 'R_hat']].head()).tab_header(title = 'Diagnostics for Main Model', subtitle = 'With the Top 5 Rows')
@@ -668,7 +623,7 @@ gt(pd.DataFrame({'item': np.arange(stan_dict['I']),
 #| label: ppp dataset
 
 pd.DataFrame({'item': np.arange(stan_dict['I']),
-              't_prop_over': t_compare_list}).to_csv(here(f'{diagnose_directory}item_ppp.csv')) # TODO change directory
+              't_prop_over': t_compare_list}).to_csv(here(f'{item_ppp_directory}'))
 ```
 
 # Latent Classes
@@ -806,18 +761,19 @@ While calculations are created to see how many respondents can be deemed profice
 ```{python}
 #| label: Proficiency List
 
-attr_w = pd.concat([df['anon_id'], attr_w], axis = 1)
-attr_w = attr_w.drop(columns = 'stu')
-attr_w.columns = ['anon_id', attr1, attr2, attr3, attr4]
+attr_wide = pd.concat([df['anon_id'], attr_w], axis = 1)
+attr_wide = attr_wide.drop(columns = 'stu')
+attr_wide.columns = ['anon_id', attr1, attr2, attr3, attr4, attr5]
 
-gt(attr_w.drop(columns = 'anon_id'))
+attr_wide
+# gt(attr_wide.drop(columns = 'anon_id'))
 ```
 
 ```{python}
 #| label: Proficiency data (csv)
 
-attravg.drop(columns = ['acc_comp', 'cons_comp']).to_csv(here('reports/2026/quiz2/respondent_proficiency_raw.csv'))
-attr_w.to_csv(here('reports/2026/quiz2/respondent_proficiency_list.csv'))
+attravg.drop(columns = ['acc_comp', 'cons_comp']).to_csv(here(f'{resp_proficieny_raw_list_directory}'))
+attr_w.to_csv(here(f'{resp_proficiency_list_directory}'))
 ```
 
 # Model Fit: Leave One-Out Cross Validation (LOO)
@@ -892,7 +848,7 @@ Depending on whatever class respondents belong to, these plots show which items 
 #| label: Pi matrix for class with all proficiencies
 
 (
-  pn.ggplot(piavg.loc[piavg['class_label'] == '1111'],
+  pn.ggplot(piavg.loc[piavg['class_label'] == '11111'],
             pn.aes('item',
                    'mean'))
   + pn.geom_errorbar(pn.aes(ymin = 'q_lower', ymax = 'q_upper'),
