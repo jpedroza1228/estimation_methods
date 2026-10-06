@@ -1,7 +1,7 @@
 ---
 title: "DCM Assessment Report"
 subtitle: "STAT 134 Su26 - Quiz 2"
-jupyter: alt_grading_assess
+jupyter: .venv
 execute:
   warning: false
   message: false
@@ -78,8 +78,8 @@ diagnose_directory = 'reports/2026/diagnostics/2026/quiz2/'
 ```{python}
 #| label: DataFrame & Q-Matrix
 
-df = pd.read_csv(here(f'{data_directory}quiz2_anon_dcm.csv')).drop(columns = 'Unnamed: 0')
-q = pd.read_csv(here(f'{q_directory}quiz2_qmatrix_4attr.csv'))
+df = pd.read_csv(here(f'{data_directory}stat_134_2025_quiz5.csv')).drop(columns = 'Unnamed: 0')
+q = pd.read_csv(here(f'{q_directory}quiz5_q_5attr.csv'))
 q['item'] = ['item' + str(i) for i in q['item']]
 
 print(df.head())
