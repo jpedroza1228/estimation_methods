@@ -390,7 +390,7 @@ Before we can conduct ppp-values for each item, I like to see the raw counts of 
 ```{python}
 #| label: All code run for plots/tables
 
-# slipping & guessing
+# noise
 noise = fitdf.filter(regex = 'noise').reset_index()
 noise = noise.rename(columns = {'index': 'draw'})
 
