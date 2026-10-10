@@ -20,6 +20,7 @@ dependencies = [
     "plotnine>=0.15.8",
     "pyhere>=1.0.3",
     "pyjanitor>=0.32.27",
+    "scikit-learn>=1.9.1",
 ]
 
 [build-system]
