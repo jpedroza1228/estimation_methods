@@ -447,6 +447,51 @@ piavg_subset = piavg[piavg['class_label'].isin(selected_labels)]
 
 ```
 
+```{python}
+#| label: Global Fit Indices
+
+# 1. Calculate RMSE based on marginal item pass rates
+rmse = np.sqrt(((ppc_df['observed_p'] - ppc_df['predicted_p'])**2).mean())
+
+# 2. Extract maximized log-likelihood from Stan's L-BFGS output
+log_lik = fitdf['lp__'].iloc[0]
+
+# 3. Define sample size (n) and estimated parameters (k)
+# k = guessing (I) + slipping (I) + latent class proportions (C - 1)
+n = df_responses.shape[0]
+I = df_responses.shape[1]
+C = alpha.shape[0]
+k = (2 * I) + (C - 1)
+
+# 4. Compute Information Criteria
+bic = -2 * log_lik + k * np.log(n)
+sabic = -2 * log_lik + k * np.log((n + 2) / 24)
+
+# 5. Construct the metrics DataFrame
+fit_metrics = pd.DataFrame({
+    'Fit Index': [
+        'RMSE (Item Pass Rates)', 
+        'BIC', 
+        'Sample-Size Adjusted BIC (SABIC)'
+    ],
+    'Value': [rmse, bic, sabic]
+})
+
+# Force string formatting to maintain exactly 4 decimal places
+fit_metrics['Value'] = fit_metrics['Value'].apply(lambda x: f"{x:.4f}")
+
+# 6. Generate and display the formatted table (removed the 'return')
+(
+    gt(fit_metrics)
+    .tab_header(
+        title='Global Model Fit Statistics',
+        subtitle='Calculated via maximized log-posterior and marginal item probabilities'
+    )
+    .opt_table_font(font="Arial")
+)
+
+```
+
 # Reliability
 
 Accuracy measures the mean maximum classification certainty, and consistency evaluates decision reproducibility.
