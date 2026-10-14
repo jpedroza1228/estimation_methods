@@ -1,6 +1,6 @@
 ---
 title: DCM Assessment Report
-subtitle: STAT 134 Su26 - Quiz 5 (5-Attribute MAP)
+subtitle: STAT 134 Su26 - Quiz 5 (5-Attribute MAP - Non-Informative Priors)
 jupyter:
   kernelspec:
     display_name: .venv (3.14.7)
@@ -31,9 +31,10 @@ attr3 = 'properties_of_expectation'
 attr4 = 'expectations_of_famous_distributions'
 attr5 = 'properties_of_variance'
 
+
 ```
 
-```{python}
+```{python} 
 #| output: false
 #| label: Packages
 
@@ -55,16 +56,18 @@ pn.theme_set(pn.theme_classic())
 
 data_directory = 'data/'
 q_directory = 'q_matrix/'
-stan_directory = 'stan_models/no_testlet/mle_no_priors/'
+# UPDATED DIRECTORY PATH
+stan_directory = 'stan_models/no_testlet/mle_priors/'
 diagnose_directory = 'reports/diagnostics/'
 
 os.makedirs(here(diagnose_directory), exist_ok=True)
+
 
 ```
 
 # Data Ingestion & Preprocessing
 
-```{python} 
+```{python}
 #| label: DataFrame & Q-Matrix Loading
 
 df = pd.read_csv(here(f'{data_directory}stat_134_2025_quiz5.csv'))
@@ -80,6 +83,7 @@ q['item'] = ['item' + str(i) for i in q['item']]
 active_attrs = [attr1, attr2, attr3, attr4, attr5]
 q_attr_cols = [col for col in active_attrs if col in q.columns]
 q = q[['item'] + q_attr_cols]
+
 
 
 ```
@@ -102,6 +106,7 @@ removed_msg = ", ".join(zero_var_items) if zero_var_items else "None"
 print(f"Item Screening Summary:\nActive Items Retained: {len(q)}\nZero-Variance Items Removed: {removed_msg}")
 
 
+
 ```
 
 # Attribute Profile Matrix
@@ -116,6 +121,7 @@ alpha = pd.DataFrame(alpha_grid, columns=[f'attr{i+1}' for i in range(num_attrs)
 alpha['class_label'] = alpha.astype(int).astype(str).agg(''.join, axis=1)
 alpha = alpha.reset_index()
 alpha['index'] = alpha['index'] + 1
+
 
 
 ```
@@ -146,6 +152,7 @@ summary_df = pd.DataFrame({
 gt(summary_df).tab_header(title='DCM Structure Overview').opt_table_font(font="Arial")
 
 
+
 ```
 
 ```{python}
@@ -164,11 +171,13 @@ stan_dict = {
 }
 
 
+
 ```
 
 # Stan Code Execution
 
 ```{python}
+
 #| label: model execution
 #| output: false
 
@@ -184,8 +193,9 @@ fit = model.optimize(
     show_console=False
 )
 
+# UPDATED JOBLIB NAME FOR NON-INFORMATIVE PRIORS
 joblib.dump([model, fit],
-            here(f'{stan_directory}mle_dino_dina_model.joblib'),
+            here(f'{stan_directory}map_noninformative_dino_dina_model.joblib'),
             compress=3)
 
 
@@ -197,9 +207,11 @@ joblib.dump([model, fit],
 fitdf = fit.optimized_params_pd
 opt_summary = pd.DataFrame({
     'Parameter Set': ['Total Parameters Estimated', 'Optimization Algorithm', 'Execution Status'],
-    'Details': [len(fitdf.columns), 'L-BFGS MLE', 'Converged Successfully']
+    # UPDATED LABEL
+    'Details': [len(fitdf.columns), 'L-BFGS MAP (Non-Informative Priors)', 'Converged Successfully']
 })
 gt(opt_summary).tab_header(title='Stan Optimization Diagnostics')
+
 
 
 ```
@@ -249,6 +261,7 @@ class_prop = class_long.groupby('latclass')['estimate'].mean().reset_index()
 class_prop = class_prop.merge(alpha, how='inner', left_on='latclass', right_on='index')
 
 
+
 ```
 
 # Model Diagnostics: Actual vs. Predicted (Expected vs. Observed)
@@ -285,6 +298,7 @@ ppc_melt['Data_Source'] = ppc_melt['Data_Source'].map({'observed_p': 'Observed D
 )
 
 
+
 ```
 
 # Latent Classes
@@ -306,6 +320,7 @@ top10_classes = class_prop.nlargest(10, 'estimate')
 )
 
 
+
 ```
 
 # Proficiency/Mastery
@@ -321,9 +336,11 @@ top10_classes = class_prop.nlargest(10, 'estimate')
   + pn.facet_wrap('attr')
   + pn.labs(title='Respondent Skill Proficiency Estimates',
             x='Student Index',
-            y='MLE Probability')
+            # CHANGED TO MAP
+            y='MAP Probability')
   + pn.theme(axis_text_x=pn.element_blank())
 )
+
 
 
 ```
@@ -340,6 +357,7 @@ gt(attr_w_export.drop(columns='anon_id').head(15)).tab_header(
     title='Respondent Proficiency Matrix',
     subtitle='Displaying first 15 respondents'
 )
+
 
 
 ```
@@ -365,11 +383,12 @@ gt(attr_w_export.drop(columns='anon_id').head(15)).tab_header(
 )
 
 
+
 ```
 
 # Item Correctness Probabilities across Latent Classes
 
-```{python}
+```{python} 
 #| label: Pi matrix - Selected Primary Classes
 
 top_class_labels = class_prop.nlargest(6, 'estimate')['class_label'].tolist()
@@ -391,6 +410,7 @@ piavg_subset = piavg[piavg['class_label'].isin(selected_labels)]
             y='Probability')
   + pn.theme(legend_position='none')
 )
+
 
 
 ```
@@ -430,13 +450,14 @@ fit_metrics['Value'] = fit_metrics['Value'].apply(lambda x: f"{x:.4f}")
 )
 
 
+
 ```
 
 # Reliability
 
-> *Note:* Optimization via L-BFGS MLE acts without priors and may still drive individual posterior probabilities close to boundary values.
+> *Note:* Optimization via L-BFGS MAP utilizes non-informative Beta(1, 1) priors for slipping and guessing parameters. This pulls extreme point estimates away from boundary values (0 and 1) compared to pure MLE, serving as a regularizer for item characteristics.
 
-```{python}
+```{python} 
 #| label: Reliability metrics for model
 
 reliability = attravg.groupby('attr').agg(
