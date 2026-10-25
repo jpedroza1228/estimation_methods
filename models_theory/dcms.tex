@@ -1,0 +1,391 @@
+\documentclass[11pt,a4paper]{article}
+
+% --- Required Packages ---
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsfonts,bm,mathtools,amsthm}
+\usepackage{booktabs}
+\usepackage[hidelinks]{hyperref} % Added [hidelinks] to remove red boxes
+\usepackage{bookmark} % Added to prevent rerunfilecheck outline warnings
+
+% --- Theorem Environments ---
+\newtheorem{theorem}{Theorem}
+
+% --- Document Metadata ---
+\title{\textbf{Diagnostic Classification Models: Rigorous Mathematical 
+Formulation of DINA, DINO, rDINA, and rDINO Models 
+with Prior Specifications}}
+\author{\textbf{Jonathon A. Pedroza \& Boting Zhang}}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+% --- Table of Contents ---
+\tableofcontents
+\newpage
+
+\section{Latent Space Formulation}
+
+Let $N$ denote the total number of examinees ($i = 1, \dots, N$), 
+$J$ denote the total number of items ($j = 1, \dots, J$), 
+and $K$ denote the number of binary latent attributes ($k = 1, \dots, K$). 
+In the provided Stan models, $J$ represents examinees, 
+$I$ represents items, and $C$ represents the latent classes. 
+For notational standard, we map these to $N$ (examinees), 
+$J$ (items), and $L$ (latent classes).
+
+\begin{itemize}
+    \item \textbf{Latent Attribute Vector:} 
+    Examinee $i$'s attribute mastery profile is represented by the binary vector:
+    \begin{equation}
+        \boldsymbol{\alpha}_i = (\alpha_{i1}, \alpha_{i2}, \dots, \alpha_{iK})^T \in \{0, 1\}^K
+    \end{equation}
+    where $\alpha_{ik} = 1$ if examinee $i$ has mastered attribute $k$, 
+    and $0$ otherwise.
+
+    \item \textbf{Latent Class Space:} 
+    The latent class space comprises $L = 2^K$ distinct attribute patterns. 
+    Let $\boldsymbol{\alpha}_l$ denote the $l$-th attribute profile vector 
+    for $l \in \{1, \dots, L\}$. 
+    The prior distribution of latent class membership is governed 
+    by the structural probability vector:
+    \begin{equation}
+        \boldsymbol{\pi} = (\pi_1, \pi_2, \dots, \pi_L)^T, 
+        \quad \text{where } \pi_l = P(\boldsymbol{\alpha}_i = \boldsymbol{\alpha}_l), 
+        \quad \sum_{l=1}^L \pi_l = 1
+    \end{equation}
+
+    \item \textbf{Q-Matrix ($\mathbf{Q}$):} 
+    $\mathbf{Q} = [q_{jk}]_{J \times K} \in \{0, 1\}^{J \times K}$, 
+    where $q_{jk} = 1$ if item $j$ requires attribute $k$, 
+    and $0$ otherwise.
+\end{itemize}
+
+% Fixed hyperref warning using \texorpdfstring
+\section{Deterministic Inputs and Ideal Responses (\texorpdfstring{$\xi_{jl}$}{xi\_jl})}
+
+The core difference between the conjunctive (DINA) and disjunctive (DINO) 
+families lies in the formulation of the deterministic input (ideal response), 
+denoted as $\xi_{jl}$ (or $\eta_{jl}$), which represents whether 
+latent class $l$ meets the attribute requirements for item $j$.
+
+\subsection{DINA (Deterministic Inputs, Noisy ``AND'' Gate)}
+In the DINA model, an examinee must possess \textit{all} required attributes 
+for an item to have an ideal response of 1. 
+It functions as a logical AND gate:
+\begin{equation}
+    \xi_{jl}^{\text{DINA}} = \prod_{k=1}^K \alpha_{lk}^{q_{jk}} \in \{0, 1\}
+\end{equation}
+
+\subsection{DINO (Deterministic Inputs, Noisy ``OR'' Gate)}
+In the DINO model, an examinee must possess \textit{at least one} 
+of the required attributes to have an ideal response of 1. 
+It functions as a logical OR gate:
+\begin{equation}
+    \xi_{jl}^{\text{DINO}} = 1 - \prod_{k=1}^K (1 - \alpha_{lk})^{q_{jk}} \in \{0, 1\}
+\end{equation}
+
+\section{Item Response Functions and Stochastic Noise Models}
+
+To account for stochastic noise (i.e., human error), 
+we apply probabilistic parameters to the deterministic inputs.
+
+\subsection{Unrestricted Models: DINA and DINO}
+The standard DINA and DINO models utilize two item-specific noise parameters:
+\begin{enumerate}
+    \item \textbf{Slipping Parameter ($s_j$):} $s_j = P(Y_{ij} = 0 \mid \xi_{jl} = 1)$. 
+    The probability of missing the item despite meeting attribute requirements.
+    \item \textbf{Guessing Parameter ($g_j$):} $g_j = P(Y_{ij} = 1 \mid \xi_{jl} = 0)$. 
+    The probability of correctly guessing the item without meeting requirements.
+\end{enumerate}
+The conditional success probability for latent class $l$ on item $j$ is formulated as:
+\begin{equation}
+    P_{jl} \equiv P(Y_{ij} = 1 \mid \boldsymbol{\alpha}_l, s_j, g_j) 
+    = (1 - s_j)^{\xi_{jl}} g_j^{1 - \xi_{jl}}
+\end{equation}
+
+\subsection{Restricted Models: rDINA and rDINO}
+The restricted models (rDINA and rDINO) impose a parsimony constraint 
+by assuming that the probability of slipping is equal to 
+the probability of guessing. They define a single noise parameter per item:
+\begin{equation}
+    e_j = s_j = g_j
+\end{equation}
+The conditional success probability is simplified to:
+\begin{equation}
+    P_{jl} \equiv P(Y_{ij} = 1 \mid \boldsymbol{\alpha}_l, e_j) 
+    = (1 - e_j)^{\xi_{jl}} e_j^{1 - \xi_{jl}}
+\end{equation}
+This formulation restricts the flexibility of the item response function 
+but enhances parameter identifiability and reduces standard errors, 
+especially in small sample sizes.
+
+\section{Likelihood Structure and Prior Formulations}
+
+\subsection{Marginal Log-Likelihood}
+For an observed response matrix $\mathbf{Y}$ of $N$ respondents and $J$ items, 
+the marginal log-likelihood, integrating over the $L$ discrete latent classes, 
+is identical in structure across the DINA, DINO, rDINA, and rDINO models. 
+The formulation models the probability of the observed response $Y_{ij} \in \{0, 1\}$ 
+given the item parameters (slipping $\mathbf{s}$, guessing $\mathbf{g}$) 
+and latent class proportions $\boldsymbol{\pi}$:
+
+$$ \log L(\mathbf{s}, \mathbf{g}, \boldsymbol{\pi} \mid \mathbf{Y}) 
+= \sum_{i=1}^N \log \left( \sum_{l=1}^L \pi_l 
+\prod_{j=1}^J P_{jl}^{Y_{ij}} (1 - P_{jl})^{1 - Y_{ij}} \right) $$
+
+where $P_{jl}$ represents the probability of a respondent in latent class $l$ 
+correctly answering item $j$. The definition of $P_{jl}$ depends on the 
+specific deterministic input (e.g., the $\xi_{jl}$ or $\eta_{jl}$ matrices 
+derived from the Q-matrix) dictating whether the class possesses 
+the required attributes.
+
+\subsection{Estimation Paradigms and Prior Specifications}
+The models demonstrate estimation under three distinct paradigms using Stan: 
+Maximum Likelihood Estimation (MLE), Maximum A Posteriori (MAP), 
+and fully Bayesian Markov Chain Monte Carlo (MCMC). 
+These are controlled by modifying the objective function via 
+the `target +=` statement and the chosen estimation algorithm.
+
+\subsubsection{Maximum Likelihood Estimation (MLE / Flat Posterior)}
+When optimized using the L-BFGS algorithm without explicit prior distributions, 
+the model implies $s_j, g_j \sim \text{Beta}(1, 1)$. 
+This prior acts as a uniform distribution over $[0, 1]$. 
+Because the log-density of a $\text{Beta}(1,1)$ distribution is $0$, 
+it adds a constant to the log-posterior. The target corresponds purely to the MLE:
+
+$$ \log P(\boldsymbol{\theta} \mid \mathbf{Y}) 
+\propto \log L(\mathbf{s}, \mathbf{g}, \boldsymbol{\pi} \mid \mathbf{Y}) $$
+
+While computationally efficient, MLE point estimates in sparse diagnostic data 
+often drift toward boundaries ($0$ or $1$). 
+Mathematically, this forces reliability metrics like accuracy ($\max(p, 1-p)$) 
+and consistency ($p^2 + (1-p)^2$) to artificially resolve to exactly $1.000$.
+
+\subsubsection{Maximum A Posteriori (MAP / Regularization)}
+To regularize the model and prevent boundary estimates (e.g., $s_j=0$ or $g_j=0$), 
+mildly informative priors are applied and optimized via L-BFGS. 
+Specifically, $s_j, g_j \sim \text{Beta}(5, 20)$. 
+This reflects prior substantive knowledge that slipping and guessing 
+parameters generally fall below $0.30$, with an expected mean of $5 / (5+20) = 0.20$.
+
+The regularized log-posterior (penalized log-likelihood) becomes:
+
+$$ \log P(\boldsymbol{\theta} \mid \mathbf{Y}) 
+\propto \log L(\boldsymbol{\theta} \mid \mathbf{Y}) 
++ \sum_{j=1}^J \Big[ (5 - 1)\log(s_j) + (20 - 1)\log(1 - s_j) \Big] + \dots $$
+
+\begin{theorem}[Well-Posedness of Regularized Optimization]\label{thm:well_posed}
+Under the $\text{Beta}(5, 20)$ prior, the shape parameters strictly exceed $1$. 
+This ensures that the penalization terms $\log(s_j)$ and $\log(1-s_j)$ 
+force the objective function toward $-\infty$ as $s_j \to 0$ or $s_j \to 1$. 
+Thus, the MAP estimates are strictly constrained to the interior of the 
+parameter space $(0, 1)$, resolving numerical instabilities associated 
+with zero-counts.
+\end{theorem}
+\textit{Proof provided in Appendix \ref{app:proof_well_posed}.}
+
+\subsubsection{Markov Chain Monte Carlo (MCMC) Estimation}
+For full uncertainty quantification, the models are additionally estimated via MCMC 
+utilizing Stan's Hamiltonian Monte Carlo (HMC) with the No-U-Turn Sampler (NUTS). 
+Unlike MLE/MAP which yield point estimates, MCMC yields full posterior 
+distributions for $\mathbf{s}$, $\mathbf{g}$, and class memberships. 
+
+MCMC estimation is deployed under two prior conditions:
+\begin{itemize}
+    \item \textbf{Non-Informative Priors:} Utilizing $\text{Beta}(1, 1)$ priors, 
+    allowing the posterior to be entirely data-driven.
+    \item \textbf{Slightly Informative Priors:} Utilizing $\text{Beta}(5, 20)$ 
+    for item parameters to gently guide the sampler and improve convergence 
+    (measured via $\hat{R} < 1.01$ and $\text{ESS} > 400$).
+\end{itemize}
+
+The fully Bayesian approach enables robust Posterior Predictive Model Checks (PPMC). 
+By generating replicated datasets ($\mathbf{Y}^{\text{rep}}$) from the posterior draws, 
+we compute Posterior Predictive P-values (PPP) at both the global and item levels. 
+PPP values near $0.5$ indicate the generated data closely matches 
+the observed data structure, confirming that the specified Q-matrix and 
+DINA/DINO condensation rules adequately capture the students' actual 
+response generation process.
+
+\section{Theoretical Properties and Model Fit Diagnostics}
+
+Building upon the estimation paradigms established in the previous section, 
+we now formalize the mathematical advantages of our current testing framework. 
+Specifically, we demonstrate the regularizing effect of the MAP estimator 
+on parameter identifiability and establish the theoretical basis for our 
+Posterior Predictive Model Checks (PPMC).
+
+\subsection{Identifiability and Uniqueness in Restricted Models}
+
+As observed in our empirical tests, Maximum Likelihood Estimation (MLE) 
+for diagnostic models often suffers from flat likelihood surfaces or 
+boundary estimates when sample sizes are small or class distributions 
+are highly skewed. The restricted models (rDINA and rDINO) combined with 
+Maximum A Posteriori (MAP) estimation provide a mathematically guaranteed 
+unique solution under specific conditions.
+
+Let us analyze the complete-data log-likelihood for a single item $j$ 
+under the rDINA/rDINO framework, assuming latent class memberships $\boldsymbol{\alpha}_i$ 
+are temporarily known (e.g., within an EM algorithm's M-step or a 
+Hamiltonian Monte Carlo iteration). 
+
+Let $N_{j1}$ be the number of examinees for whom $\xi_{jl} = 1$, 
+and let $S_{j1}$ be the number of correct responses among them. 
+Similarly, let $N_{j0}$ be the number of examinees for whom $\xi_{jl} = 0$, 
+with $S_{j0}$ correct responses. 
+The item-specific complete-data penalized log-likelihood, 
+utilizing an $e_j \sim \text{Beta}(a, b)$ prior, is:
+
+\begin{equation}
+\begin{split}
+    \ell(e_j) &= S_{j1} \log(1 - e_j) + (N_{j1} - S_{j1}) \log(e_j) 
+    + S_{j0} \log(e_j) \\
+    &\quad + (N_{j0} - S_{j0}) \log(1 - e_j) 
+    + (a - 1)\log(e_j) + (b - 1)\log(1 - e_j)
+\end{split}
+\end{equation}
+
+Grouping the terms by $\log(e_j)$ and $\log(1-e_j)$, 
+we define constants $A_j$ and $B_j$:
+\begin{align*}
+    A_j &= (N_{j1} - S_{j1}) + S_{j0} + (a - 1) \\
+    B_j &= S_{j1} + (N_{j0} - S_{j0}) + (b - 1)
+\end{align*}
+yielding the simplified objective function:
+\begin{equation}
+    \ell(e_j) = A_j \log(e_j) + B_j \log(1 - e_j)
+\end{equation}
+
+\begin{theorem}[Strict Concavity of the rDINA/rDINO Objective Function]\label{thm:strict_concavity}
+If the prior shape parameters satisfy $a > 1$ and $b > 1$, 
+the penalized complete-data log-likelihood for the noise parameter $e_j$ 
+is strictly concave on the interval $(0, 1)$, 
+guaranteeing a unique global maximum.
+\end{theorem}
+\textit{Proof provided in Appendix \ref{app:proof_strict_concavity}.}
+
+This highlights the core improvement in our current MAP/MCMC testing phase: 
+by utilizing $a=5$ and $b=20$, we forcefully bound $A_j$ and $B_j$ away from zero, 
+entirely eliminating the multimodal or unbounded likelihood spaces 
+that typically cause L-BFGS to fail in sparse Q-matrix designs.
+
+\subsection{Improvements in Model Fit Testing via PPMC}
+
+Our current testing phase relies heavily on Posterior Predictive Model 
+Checking (PPMC) to evaluate the absolute fit of the Q-matrix and 
+the chosen condensation rule (DINA vs. DINO). 
+Unlike traditional frequentist $\chi^2$ tests which rely on asymptotic 
+approximations that fail under sparse cognitive diagnostic data, 
+PPMC provides exact finite-sample validity.
+
+Let $T(\mathbf{Y})$ be a discrepancy measure 
+(e.g., item-pair odds ratios or raw score distributions). 
+At each MCMC iteration $m = 1, \dots, M$, we draw a replicated dataset 
+$\mathbf{Y}^{\text{rep},(m)}$ from the posterior predictive distribution:
+\begin{equation}
+    P(\mathbf{Y}^{\text{rep}} \mid \mathbf{Y}) 
+    = \int P(\mathbf{Y}^{\text{rep}} \mid \boldsymbol{\theta}) 
+    P(\boldsymbol{\theta} \mid \mathbf{Y}) d\boldsymbol{\theta}
+\end{equation}
+
+The Bayesian Posterior Predictive P-value (PPP) is defined mathematically 
+as the expected indicator function over the posterior:
+\begin{equation}
+\begin{split}
+    PPP &= \mathbb{E}_{\boldsymbol{\theta} \mid \mathbf{Y}} 
+    \left[ \Pr(T(\mathbf{Y}^{\text{rep}}, \boldsymbol{\theta}) 
+    \ge T(\mathbf{Y}, \boldsymbol{\theta}) \mid \boldsymbol{\theta}) \right] \\
+    &\approx \frac{1}{M} \sum_{m=1}^M 
+    I\left(T(\mathbf{Y}^{\text{rep},(m)}, \boldsymbol{\theta}^{(m)}) 
+    \ge T(\mathbf{Y}, \boldsymbol{\theta}^{(m)})\right)
+\end{split}
+\end{equation}
+
+By transitioning our tests from purely relative information criteria (AIC/DIC) 
+to item-level PPP evaluations, we can independently verify the 
+$q$-vector for each item. 
+If an item exhibits an extreme PPP value (e.g., $p < 0.05$ or $p > 0.95$) 
+under the DINA model but resolves near $0.50$ under the DINO model, 
+we possess direct mathematical justification that the latent traits 
+interact compensatorily rather than conjunctively for that specific item.
+
+\newpage
+\appendix
+\section{Proofs of Theorems}
+
+\subsection{Proof of Theorem \ref{thm:well_posed}} \label{app:proof_well_posed}
+\begin{proof}
+Let the objective function for the slipping parameter $s_j$ 
+(and symmetrically for $g_j$) be denoted as $f(s_j)$. 
+Isolating the terms involving $s_j$, the regularized log-posterior is:
+\begin{equation}
+    f(s_j) = \ell(s_j \mid \mathbf{Y}, \mathbf{g}, \boldsymbol{\pi}) 
+    + (\alpha - 1)\log(s_j) + (\beta - 1)\log(1 - s_j)
+\end{equation}
+where $\ell(s_j \mid \dots)$ is the marginal log-likelihood component 
+associated with $s_j$, and the Beta prior shape parameters are 
+$\alpha = 5$ and $\beta = 20$.
+
+By definition, the likelihood function returns a probability bounded by $[0, 1]$. 
+Therefore, its logarithm is bounded above such that 
+$\ell(s_j \mid \dots) \le 0$ for all $s_j \in [0, 1]$.
+
+We analyze the limits of the objective function $f(s_j)$ 
+as the parameter approaches the boundaries of its domain:
+\begin{itemize}
+    \item As $s_j \to 0^+$, the penalization term 
+    $(\alpha - 1)\log(s_j) = 4\log(s_j) \to -\infty$.
+    \item As $s_j \to 1^-$, the penalization term 
+    $(\beta - 1)\log(1 - s_j) = 19\log(1 - s_j) \to -\infty$.
+\end{itemize}
+
+Because the log-likelihood term $\ell(s_j \mid \dots)$ is bounded 
+above by $0$ and cannot diverge to $+\infty$ to cancel out the penalty, 
+the entire objective function diverges to negative infinity at the boundaries:
+\begin{equation}
+    \lim_{s_j \to 0^+} f(s_j) = -\infty \quad \text{and} \quad \lim_{s_j \to 1^-} f(s_j) = -\infty
+\end{equation}
+
+Since $f(s_j)$ is a continuous function on the open interval $(0, 1)$ 
+and tends to $-\infty$ at both boundaries, by the Extreme Value Theorem 
+(adapted for open intervals with infinite limits), the function must achieve 
+its global maximum at some point strictly within the interior of the interval. 
+
+Thus, the MAP estimate $\hat{s}_j = \arg\max_{s_j} f(s_j)$ 
+is guaranteed to satisfy $0 < \hat{s}_j < 1$. The same holds for $g_j$. 
+This strict bounding theoretically precludes any point estimate from reaching 
+the absorbing states of $0$ or $1$, thereby guaranteeing numerical stability 
+during L-BFGS optimization.
+\end{proof}
+
+\subsection{Proof of Theorem \ref{thm:strict_concavity}} \label{app:proof_strict_concavity}
+\begin{proof}
+We compute the first and second derivatives of $\ell(e_j)$ with respect to $e_j$:
+\begin{align}
+    \frac{\partial \ell(e_j)}{\partial e_j} &= \frac{A_j}{e_j} - \frac{B_j}{1 - e_j} \\
+    \frac{\partial^2 \ell(e_j)}{\partial e_j^2} &= -\frac{A_j}{e_j^2} - \frac{B_j}{(1 - e_j)^2}
+\end{align}
+Since $N_{j1}, S_{j1}, N_{j0}, S_{j0} \ge 0$, and by assumption 
+$a > 1 \implies (a-1) > 0$ and $b > 1 \implies (b-1) > 0$, 
+it follows that $A_j > 0$ and $B_j > 0$. 
+Consequently, for any $e_j \in (0, 1)$:
+\begin{equation}
+    -\frac{A_j}{e_j^2} - \frac{B_j}{(1 - e_j)^2} < 0
+\end{equation}
+Because the second derivative is strictly negative across the 
+entire domain $(0,1)$, the function is strictly concave. 
+Thus, any stationary point found where $\frac{\partial \ell}{\partial e_j} = 0$ 
+is guaranteed to be the unique global maximum.
+\end{proof}
+
+
+
+
+\newpage
+\section{References}
+\bibliographystyle{apalike} % Or plain, ieeetr, acm, etc.
+\bibliography{references} 
+
+\end{document}
