@@ -3,6 +3,7 @@ name = "estimation_methods"
 
 [dependencies]
 GDINA = "*"
+NPCD = "*"
 glue = "*"
 gt = "*"
 here = "*"

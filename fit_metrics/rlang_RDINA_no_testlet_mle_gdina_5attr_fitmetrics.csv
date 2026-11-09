@@ -1,0 +1,2 @@
+design,model,prior,num_attr,rmse
+no_testlet,RDINA,mle_gdina,5attr,0.4281378706296898

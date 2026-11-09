@@ -31,7 +31,7 @@ threshold <- .8
 model_type <- 'DINA'
 design <- 'no_testlet'
 num_attr <- '5attr'
-est_type <- 'mle'
+est_type <- 'mle_gdina'
 
 attr1 <- 'expectations_of_functions'
 attr2 <- 'definition_of_variance'
@@ -45,7 +45,7 @@ attr5 <- 'properties_of_variance'
 #| label: Packages
 
 # install this to update with the packages I used
-pak::pak("nbafrank/uvr-r")
+# pak::pak("nbafrank/uvr-r")
 
 # running everything below this should work
 library(uvr)
@@ -81,7 +81,7 @@ theme_set(theme_light())
 data_directory <- "data/stat_134_2025_quiz5.csv"
 q_directory <- "q_matrix/quiz5_q_5attr.csv"
 
-save_model_joblib_directory <- glue("data/joblib_models/{model_type}_{design}_{num_attr}_{est_type}.joblib")
+# save_model_joblib_directory <- glue("data/joblib_models/{model_type}_{design}_{num_attr}_{est_type}.joblib")
 resp_proficieny_raw_list_directory = glue("data/mastery_lists/rlang_{model_type}_{design}_{num_attr}_{est_type}_resp_prof_raw.csv")
 resp_proficiency_list_directory <- glue("data/mastery_lists/rlang_{model_type}_{design}_{num_attr}_{est_type}_resp_prof_list.csv")
 ```
@@ -92,7 +92,10 @@ resp_proficiency_list_directory <- glue("data/mastery_lists/rlang_{model_type}_{
 ```{r}
 #| label: DataFrame & Q-Matrix Loading
 
-df <- read_csv(here::here(glue('{data_directory}'))) |> 
+data <- read_csv(here::here(glue('{data_directory}')))
+
+df <-
+data |>
   select(
     -c(
       1,
@@ -102,11 +105,14 @@ df <- read_csv(here::here(glue('{data_directory}'))) |>
   )
 df
 
-q <- read_csv(here::here(glue('{q_directory}'))) |>
+qmatrix <- read_csv(here::here(glue('{q_directory}'))) |>
   janitor::clean_names() |>
   filter(
     item != 35
-  ) |>
+  )
+
+q <- 
+qmatrix |>
   select(
     -c(
       x1,
@@ -116,17 +122,13 @@ q <- read_csv(here::here(glue('{q_directory}'))) |>
   )
 ```
 
-```{r}
-q |> glimpse()
-```
-
 # Model 
 
 ```{r}
 set.seed(7102026)
 dina_mod <- GDINA(dat = df,
              Q = q,
-             model = "DINA",
+             model = model_type,
              att.dist = "saturated",
              niter = 2000,
              maxitr = 2000
@@ -134,224 +136,8 @@ dina_mod <- GDINA(dat = df,
 summary(dina_mod)
 ```
 
-```{r}
-cat_map(
-  c("catprob", "delta", "gs", "itemprob"),
-  ~coef(dina_mod, .x, withSE = TRUE)
-)
+## Comparisons Between Counts Correct & Counts Estimated
 
-cat_map(
-  c("LCprob", "lambda"),
-  ~coef(dina_mod, .x)
-)
-```
-
-```{r}
-sg <- 
-coef(dina_mod, "gs") |>
-  as_tibble() |>
-  mutate(
-    item = attributes(coef(dina_mod, "gs"))$dimnames[[1]]
-  ) |>
-  relocate(
-    item,
-    .before = 'guessing'
-  ) |>
-  pivot_longer(-item)
-
-sg <-
-sg |>
-  mutate(
-    across(
-      c(
-        name,
-        item
-      ),
-      ~as.factor(.x)
-    ),
-    item = fct_relevel(
-      item,
-      cat_map(34:1, ~glue('Item {.x}'))
-    )
-  )
-
-sg |>
-  ggplot(
-    aes(
-      item,
-      value
-    )
-  ) +
-  geom_point(
-    aes(
-      color = name
-    )
-  ) +
-  coord_flip() +
-  facet_wrap(
-    vars(
-      name
-    )
-  ) +
-  see::scale_color_okabeito() +
-  theme(
-    legend.position = "none"
-  )
-```
-
-```{r}
-lat_class_prob_tbl <- coef(dina_mod, "LCprob") |>
-  as_tibble()
-
-lat_class_prob_tbl |> colnames() <- paste0('lc', lat_class_prob_tbl |> colnames())
-
-lat_class_prob_tbl <-
-lat_class_prob_tbl |>
-  mutate(
-    item = attributes(coef(dina_mod, "LCprob"))$dimnames[[1]],
-    item = str_to_lower(item)
-  ) |>
-  select(
-    item,
-    matches("lc")
-  )
-
-map2(
-  lat_class_prob_tbl |> select(-item),
-  lat_class_prob_tbl |> select(-item) |> colnames(),
-  ~ggplot(
-    lat_class_prob_tbl,
-    aes(
-      item,
-      .x
-    )
-  ) +
-  geom_point(
-    color = "seagreen"
-  ) +
-  coord_flip() +
-  geom_hline(
-    yintercept = .5, 
-    color = "black",
-    linetype = "dotted",
-    size = 1
-    ) +
-  labs(title = glue("{.y}"))
-)
-```
-
-```{r}
-set.seed(7102026)
-person_est <-
-cat_map(
-  c("mp", "MLE", "MAP"),
-  ~personparm(dina_mod, what = .x)
-)
-
-person_thresh80 <-
-person_est[[1]] |>
-  as_tibble() |>
-  mutate(
-    across(
-      everything(),
-      ~if_else(.x >= .8, 1, 0)
-    )
-  )
-
-person_est[[2]] |>
-  as_tibble() |>
-  head()
-
-person_est[[3]] |>
-  as_tibble() |>
-  head()
-
-
-write.csv(person_est[[1]] |>
-          as_tibble(),
-          resp_proficieny_raw_list_directory
-          )
-
-write.csv(person_thresh80,
-          resp_proficiency_list_directory
-          )
-```
-
-```{r}
-set.seed(7102026)
-cat_map(
-  c("MLE", "MAP"),
-  ~itemfit(dina_mod, person.sim = .x)
-)
-```
-
-```{r}
-set.seed(7102026)
-modelfit(dina_mod)
-```
-
-```{r}
-prev_tbl <-
-extract(dina_mod, "prevalence")
-
-prev_tbl <-
-tibble(
-  attr = attributes(extract(dina_mod, "prevalence")$all)$dimnames[[1]],
-  not_proficient = prev_tbl$all[1:5],
-  proficient = prev_tbl$all[6:10]
-) 
-
-prev_tbl <- prev_tbl |>
-    pivot_longer(-attr) 
-
-ggplot(
-  prev_tbl |>
-  mutate(
-    attr = fct_relevel(
-      attr,
-      c("A5", "A4", "A3", "A2", "A1")
-    )
-  ),
-  aes(
-    attr,
-    value
-  )
-) +
-geom_col(
-  aes(
-    fill = name
-  ),
-  color = "black"
-) +
-coord_flip() +
-see::scale_fill_okabeito()
-```
-
-```{r}
-extract(dina_mod, "discrim")
-```
-
-```{r}
-extract(dina_mod, "posterior.prob") |>
-  as_tibble() |>
-  pivot_longer(everything()) |>
-  ggplot(
-    aes(
-      name,
-      value
-    )
-  ) +
-  geom_col(
-    color = "black",
-    fill = "seagreen"
-  ) +
-  coord_flip()
-```
-
-```{r}
-#| label: Accuracy & Consistency
-CA(dina_mod)
-```
 
 ```{r}
 #| label: RMSE from model-implied predictions
@@ -368,10 +154,6 @@ post <- post / rowSums(post)
 # model-implied P(correct) per respondent x item = post %*% t(lc_prob)
 y_hat <- post %*% t(lc_prob)
 y_obs <- as.matrix(extract(dina_mod, "dat"))
-
-rmse_overall <- sqrt(mean((y_obs - y_hat)^2, na.rm = TRUE))
-
-rmse
 
 ```
 
@@ -451,6 +233,351 @@ full_join(
   ) +
   see::scale_color_okabeito()
 
+```
+
+## Probability of Membership in Latent Classes
+
+```{r}
+lat_class_member <- 
+personparm(dina_mod, type = "mp") |>
+  as_tibble() |>
+  janitor::clean_names() |>
+  mutate(
+    class_label = paste0(a1, a2, a3, a4, a5)
+  )
+
+class_membership <-
+tibble(
+  "id" = data$anon_id, 
+  "latent_class" = lat_class_member$class_label
+)
+
+class_membership
+```
+
+## Proportions of Latent Classes
+
+```{r}
+extract(dina_mod, "posterior.prob") |>
+  as_tibble() |>
+  pivot_longer(everything()) |>
+  ggplot(
+    aes(
+      name,
+      value
+    )
+  ) +
+  geom_col(
+    color = "black",
+    fill = "seagreen"
+  ) +
+  coord_flip() +
+  labs(
+    x = "Latent Class",
+    y = "Probability"
+  )
+```
+
+## Probability of Attribute Mastery
+
+```{r}
+set.seed(7102026)
+person_est <-
+cat_map(
+  c("mp", "MLE", "MAP"),
+  ~personparm(dina_mod, what = .x)
+)
+
+person_est[[1]] |>
+  as_tibble() |>
+  mutate(
+    stu = data$anon_id
+  ) |>
+  janitor::clean_names() |>
+  pivot_longer(
+    -stu
+  ) |>
+  ggplot(
+    aes(
+      stu,
+      value
+    )
+  ) +
+  geom_point(
+    color = "seagreen"
+    ) +
+  geom_hline(
+    yintercept = threshold,
+    color = "black",
+    linetype = "dotted"
+    ) +
+  facet_wrap(
+    vars(
+      name
+    )
+  )
+
+
+person_thresh80 <-
+person_est[[1]] |>
+  as_tibble() |>
+  mutate(
+    stu = data$anon_id
+  ) |>
+  mutate(
+    across(
+      -stu,
+      ~if_else(.x >= .8, 1, 0)
+    )
+  )
+
+person_est[[2]] |>
+  as_tibble() |>
+  head()
+
+person_est[[3]] |>
+  as_tibble() |>
+  head()
+
+write.csv(person_est[[1]] |>
+          as_tibble() |>
+            mutate(
+              stu = data$anon_id
+            ),
+          resp_proficieny_raw_list_directory
+          )
+
+write.csv(person_thresh80,
+          resp_proficiency_list_directory
+          )
+```
+
+## Slipping & Guessing
+
+```{r}
+sg <- 
+coef(dina_mod, "gs") |>
+  as_tibble() |>
+  mutate(
+    item = attributes(coef(dina_mod, "gs"))$dimnames[[1]]
+  ) |>
+  relocate(
+    item,
+    .before = 'guessing'
+  ) |>
+  pivot_longer(-item)
+
+sg <-
+sg |>
+  mutate(
+    across(
+      c(
+        name,
+        item
+      ),
+      ~as.factor(.x)
+    ),
+    item = fct_relevel(
+      item,
+      cat_map(1:34, ~glue('Item {.x}'))
+    )
+  )
+
+sg |>
+  ggplot(
+    aes(
+      item,
+      value
+    )
+  ) +
+  geom_point(
+    aes(
+      color = name
+    )
+  ) +
+  coord_flip() +
+  facet_wrap(
+    vars(
+      name
+    )
+  ) +
+  see::scale_color_okabeito() +
+  theme(
+    legend.position = "none"
+  )
+```
+
+## Probabilites of Each Class Getting Items Correct
+
+```{r}
+lat_class_prob_tbl <- coef(dina_mod, "LCprob") |>
+  as_tibble()
+
+lat_class_prob_tbl |> colnames() <- paste0('lc', lat_class_prob_tbl |> colnames())
+
+lat_class_prob_tbl <-
+lat_class_prob_tbl |>
+  mutate(
+    item = attributes(coef(dina_mod, "LCprob"))$dimnames[[1]],
+    item = str_to_lower(item)
+  ) |>
+  select(
+    item,
+    matches("lc")
+  )
+
+map2(
+  lat_class_prob_tbl |> select(-item),
+  lat_class_prob_tbl |> select(-item) |> colnames(),
+  ~ggplot(
+    lat_class_prob_tbl,
+    aes(
+      item,
+      .x
+    )
+  ) +
+  geom_point(
+    color = "seagreen"
+  ) +
+  coord_flip() +
+  geom_hline(
+    yintercept = .5, 
+    color = "black",
+    linetype = "dotted",
+    size = 1
+    ) +
+  labs(title = glue("{.y}"))
+)
+```
+
+```{r}
+set.seed(7102026)
+cat_map(
+  c("MLE", "MAP"),
+  ~itemfit(dina_mod, person.sim = .x)
+)
+```
+
+```{r}
+set.seed(7102026)
+modelfit(dina_mod)
+```
+
+```{r}
+prev_tbl <-
+extract(dina_mod, "prevalence")
+
+prev_tbl <-
+tibble(
+  attr = attributes(extract(dina_mod, "prevalence")$all)$dimnames[[1]],
+  not_proficient = prev_tbl$all[1:5],
+  proficient = prev_tbl$all[6:10]
+) 
+
+prev_tbl <- prev_tbl |>
+    pivot_longer(-attr) 
+
+ggplot(
+  prev_tbl |>
+  mutate(
+    attr = fct_relevel(
+      attr,
+      c("A5", "A4", "A3", "A2", "A1")
+    )
+  ),
+  aes(
+    attr,
+    value
+  )
+) +
+geom_col(
+  aes(
+    fill = name
+  ),
+  color = "black"
+) +
+coord_flip() +
+see::scale_fill_okabeito()
+```
+
+## Discrimination of Each Item
+
+```{r}
+extract(dina_mod, "discrim") |> 
+  as_tibble() |>
+  mutate(
+    item = glue("item{seq(1, 34, 1)}"),
+    item = as.factor(item),
+    item = fct_relevel(
+      item,
+      cat_map(1:34, ~glue('item{.x}'))
+    )
+  ) |>
+  janitor::clean_names() |>
+  select(
+    item,
+    dis_diff = p_1_p_0,
+    gdi
+  ) |>
+  ggplot(
+    aes(
+      item,
+      dis_diff
+    )
+  ) +
+  geom_point(
+    color = "seagreen"
+  ) + 
+  geom_hline(
+    yintercept = 0,
+    linetype = "dotted",
+    color = "black"
+  ) +
+  coord_flip()
+```
+
+## Accuracy & Consistency
+
+```{r}
+#| label: Accuracy & Consistency
+CA(dina_mod, what = "MLE")
+```
+
+## RMSE
+
+```{r}
+#| label: rmse
+rmse <- sqrt(mean((y_obs - y_hat)^2, na.rm = TRUE))
+
+rmse
+
+write_csv(
+  tibble(
+    design = design,
+    model = model_type,
+    prior = est_type,
+    num_attr = num_attr,
+    rmse = rmse
+  ),
+  here::here(glue('fit_metrics/rlang_{model_type}_{design}_{est_type}_{num_attr}_fitmetrics.csv'))
+)
+
+```
+
+
+# Extra
+
+```{r}
+# TODO need to examine delta & itemprob
+cat_map(
+  c("catprob", "delta", "gs", "itemprob"),
+  ~coef(dina_mod, .x, withSE = TRUE)
+)
+
+cat_map(
+  c("LCprob", "lambda"),
+  ~coef(dina_mod, .x)
+)
 ```
 
 # Model Diagnostics: Actual vs. Predicted (Expected vs. Observed)
