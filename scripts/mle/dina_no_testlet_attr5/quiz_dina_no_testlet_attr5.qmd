@@ -15,6 +15,14 @@ format:
     number-depth: 3
 ---
 
+# Important links for models in R
+
+[GDINA (for DINA & DINO models)](https://wenchao-ma.github.io/GDINA/articles/OnlineExercises/CDMAnalysis_example.html)
+
+[more information for G-DINA models and functions](https://wenchao-ma.github.io/GDINA/reference/GDINA.html#ref-examples)
+
+[cdmTools (for R-DINA and R-DINO models)](https://cran.r-project.org/web/packages/cdmTools/refman/cdmTools.html#RDINA)
+
 ```{r}
 #| label: Parameters
 #| tags: [parameters]
@@ -36,16 +44,21 @@ attr5 <- 'properties_of_variance'
 #| output: false
 #| label: Packages
 
+# install this to update with the packages I used
+pak::pak("nbafrank/uvr-r")
+
+# running everything below this should work
 library(uvr)
-init()
-lock()
-add(c("tidyverse", "glue"))
-add("Pablo-Najera/cdmTools")
-add("GDINA")
-add("here")
-add("janitor")
-add("see")
-add("gt")
+
+# init()
+# lock()
+# add(c("tidyverse", "glue"))
+# add("Pablo-Najera/cdmTools")
+# add("GDINA")
+# add("here")
+# add("janitor")
+# add("see")
+# add("gt")
 
 # pak::pak("pkgbuild")
 # pak::pak("zip")
