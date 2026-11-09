@@ -11,7 +11,8 @@ data {
 
 parameters {
   simplex[C] nu;
-  vector<lower=0, upper=.5>[I] noise;
+  real<lower=0, upper=.5> noise;
+  // real<lower=0, upper=1> noise;
 }
 
 transformed parameters {
@@ -22,7 +23,8 @@ transformed parameters {
 
   for (c in 1:C){
     for (i in 1:I){
-      pi[i,c] = pow((1 - noise[i]), xi[i,c]) * pow(noise[i], (1 - xi[i,c]));
+      pi[i,c] = pow((1 - noise), xi[i,c]) * pow(noise, (1 - xi[i,c]));
+      // pi[i,c] = pow((1 - noise[i]), xi[i,c]) * pow(noise[i], (1 - xi[i,c]));
     }
   }
 }
@@ -31,9 +33,11 @@ model{
   array[C] real ps;
   array[I] real eta;
 
-  for (i in 1:I){
-    noise[i] ~ beta(1, 1);
-  }
+  noise ~ beta(1, 1);
+
+  // for (i in 1:I){
+  //   noise[i] ~ beta(1, 1);
+  // }
   for (j in 1:J){
     for (c in 1:C){
       for (i in 1:I){
