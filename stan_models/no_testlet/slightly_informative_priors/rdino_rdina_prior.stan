@@ -11,7 +11,7 @@ data {
 
 parameters {
   simplex[C] nu;
-  vector<lower=0, upper=1>[I] noise;
+  vector<lower=0, upper=.5>[I] noise;
 }
 
 transformed parameters {
@@ -32,7 +32,8 @@ model{
   array[I] real eta;
 
   for (i in 1:I){
-    noise[i] ~ beta(5, 20);
+    // noise[i] ~ beta(5, 20);
+    noise[i] ~ beta(5, 25);
   }
 }
 

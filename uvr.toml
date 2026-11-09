@@ -1,0 +1,14 @@
+[project]
+name = "estimation_methods"
+
+[dependencies]
+GDINA = "*"
+glue = "*"
+gt = "*"
+here = "*"
+janitor = "*"
+see = "*"
+tidyverse = "*"
+
+[dependencies.cdmTools]
+git = "Pablo-Najera/cdmTools"

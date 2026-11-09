@@ -23,9 +23,13 @@ format:
 ```{python}
 #| label: Parameters
 #| tags: [parameters]
+
 threshold = .8
 model_type = 'DINA'
-# Updated to 5 Attributes - Matching Q-Matrix column names
+design = 'no_testlet'
+num_attr = '5attr'
+est_type = 'mle'
+
 attr1 = 'expectations_of_functions'
 attr2 = 'definition_of_variance'
 attr3 = 'properties_of_expectation'
@@ -54,14 +58,13 @@ pd.set_option('display.max_columns', None)
 matplotlib.rcParams.update({'savefig.bbox': 'tight'})
 pn.theme_set(pn.theme_classic())
 
-data_directory = 'data/'
-q_directory = 'q_matrix/'
-# stan_directory = 'stan_models/no_testlet/non_informative_priors/'
-stan_directory = 'stan_models/no_testlet/mle_no_priors/'
-diagnose_directory = 'reports/diagnostics/'
+data_directory = 'data/stat_134_2025_quiz5.csv'
+q_directory = 'q_matrix/quiz5_q_5attr.csv'
+stan_model_directory = 'stan_models/no_testlet/mle_no_priors/mle_dino_dina_model.stan'
 
-os.makedirs(here(diagnose_directory), exist_ok=True)
-os.makedirs(here('reports/2026/quiz2/'), exist_ok=True)
+diagnostics_directory = f'data/diagnostics/{model_type}_{design}_{num_attr}_{est_type}_diagnostics.csv'
+save_model_joblib_directory = f'data/joblib_models/{model_type}_{design}_{num_attr}_{est_type}.joblib'
+resp_proficiency_list_directory = f'data/mastery_lists/{model_type}_{design}_{num_attr}_{est_type}_resp_prof_list.csv'
 ```
 
 # Data Ingestion & Preprocessing
@@ -69,11 +72,11 @@ os.makedirs(here('reports/2026/quiz2/'), exist_ok=True)
 ```{python}
 #| label: DataFrame & Q-Matrix Loading
 
-df = pd.read_csv(here(f'{data_directory}stat_134_2025_quiz5.csv'))
+df = pd.read_csv(here(f'{data_directory}'))
 if 'Unnamed: 0' in df.columns:
     df = df.drop(columns='Unnamed: 0')
 
-q = pd.read_csv(here(f'{q_directory}quiz5_q_5attr.csv')).clean_names(case_type='snake')
+q = pd.read_csv(here(f'{q_directory}')).clean_names(case_type='snake')
 if 'unnamed_0' in q.columns:
     q = q.drop(columns='unnamed_0')
 
@@ -86,7 +89,6 @@ if 'question' in q.columns:
 active_attrs = [attr1, attr2, attr3, attr4, attr5]
 q_attr_cols = [col for col in active_attrs if col in q.columns]
 q = q[['item'] + q_attr_cols]
-
 
 ```
 
@@ -108,7 +110,6 @@ q = q[q['item'].isin(response_items)].reset_index(drop=True)
 removed_msg = ", ".join(zero_var_items) if zero_var_items else "None"
 print(f"Item Screening Summary:\n- Active Items Retained: {len(q)}\n- Zero-Variance Items Removed: {removed_msg}")
 
-
 ```
 
 # Attribute Profile Matrix
@@ -123,7 +124,6 @@ alpha = pd.DataFrame(alpha_grid, columns=[f'attr{i+1}' for i in range(num_attrs)
 alpha['class_label'] = alpha.astype(int).astype(str).agg(''.join, axis=1)
 alpha = alpha.reset_index()
 alpha['index'] = alpha['index'] + 1
-
 
 ```
 
@@ -183,20 +183,14 @@ stan_dict = {
 #| label: model execution
 #| output: false
 
-file = os.path.join(here(f'{stan_directory}mle_dino_dina_model.stan'))
+file = os.path.join(here(f'{stan_model_directory}'))
 model = CmdStanModel(stan_file=file, compile='force', cpp_options={'STAN_THREADS': 'TRUE'})
 
 np.random.seed(7102026)
-
-fit = model.optimize(
-    data=stan_dict,
-    algorithm='lbfgs',
-    iter=2000,
-    show_console=False
-)
+fit = model.optimize(data=stan_dict)
 
 joblib.dump([model, fit],
-            here(f'{stan_directory}testlet_dino_dina_mle.joblib'),
+            here(f'{save_model_joblib_directory}'),
             compress=3)
 
 
@@ -225,7 +219,7 @@ sglong['variable'] = sglong['variable'].str.replace(']', '', regex=False)
 sglong[['type', 'item']] = sglong['variable'].str.split('[', expand=True)
 sglong['item'] = sglong['item'].astype(int)
 
-sgavg = sglong[['item', 'type', 'value']].rename(columns={'value': 'estimate'})
+sgest = sglong[['item', 'type', 'value']].rename(columns={'value': 'estimate'})
 
 # Pi matrix
 pidf = fitdf.filter(regex='pi').reset_index(drop=True)
@@ -235,8 +229,8 @@ pilong['variable'] = pilong['variable'].str.replace(']', '', regex=False)
 pilong[['item', 'latclass']] = pilong['variable'].str.split(',', expand=True)
 pilong[['item', 'latclass']] = pilong[['item', 'latclass']].astype(int)
 
-piavg = pilong[['item', 'latclass', 'value']].rename(columns={'value': 'estimate'})
-piavg = piavg.merge(alpha, how='left', left_on='latclass', right_on='index')
+piest = pilong[['item', 'latclass', 'value']].rename(columns={'value': 'estimate'})
+piest = piest.merge(alpha, how='left', left_on='latclass', right_on='index')
 
 # Attribute calculations
 attrdf = fitdf.filter(regex='^prob_resp_attr').reset_index(drop=True)
@@ -246,15 +240,15 @@ attrlong['variable'] = attrlong['variable'].str.replace(']', '', regex=False)
 attrlong[['stu', 'attr']] = attrlong['variable'].str.split(',', expand=True)
 attrlong[['stu', 'attr']] = attrlong[['stu', 'attr']].astype(int)
 
-attravg = attrlong[['stu', 'attr', 'value']].rename(columns={'value': 'estimate'})
+attrest = attrlong[['stu', 'attr', 'value']].rename(columns={'value': 'estimate'})
 
 # Mastery thresholds
-attravg['mastery'] = np.where(attravg['estimate'] > threshold, 1, 0)
-attr_w = attravg.pivot(index='stu', columns='attr', values='mastery').reset_index()
+attrest['mastery'] = np.where(attrest['estimate'] > threshold, 1, 0)
+attr_w = attrest.pivot(index='stu', columns='attr', values='mastery').reset_index()
 
 # Reliability components
-attravg['acc_comp'] = attravg['estimate'].apply(lambda p: max(p, 1 - p))
-attravg['cons_comp'] = attravg['estimate'].apply(lambda p: p**2 + (1 - p)**2)
+attrest['acc_comp'] = attrest['estimate'].apply(lambda p: max(p, 1 - p))
+attrest['cons_comp'] = attrest['estimate'].apply(lambda p: p**2 + (1 - p)**2)
 
 # Latent class membership
 attr_class = fitdf.filter(regex='^prob_resp_class').reset_index(drop=True)
@@ -267,8 +261,6 @@ class_long = class_long.rename(columns={'value': 'estimate'})
 
 class_prop = class_long.groupby('latclass')['estimate'].mean().reset_index()
 class_prop = class_prop.merge(alpha, how='inner', left_on='latclass', right_on='index')
-
-
 ```
 
 # Model Diagnostics: Actual vs. Predicted (Expected vs. Observed)
@@ -285,7 +277,7 @@ obs_pass['item'] = range(1, len(obs_pass) + 1)
 
 # Calculate expected pass rate per item across classes
 class_probs = class_prop[['latclass', 'estimate']].rename(columns={'estimate': 'class_weight'})
-pred_df = piavg.merge(class_probs, on='latclass')
+pred_df = piest.merge(class_probs, on='latclass')
 pred_df['weighted_p'] = pred_df['estimate'] * pred_df['class_weight']
 expected_pass = pred_df.groupby('item')['weighted_p'].sum().reset_index().rename(columns={'weighted_p': 'predicted_p'})
 
@@ -309,7 +301,6 @@ ppc_melt['Data_Source'] = ppc_melt['Data_Source'].map({'observed_p': 'Observed D
             fill='Source')
   + pn.theme(legend_position='bottom')
 )
-
 
 ```
 
@@ -346,7 +337,7 @@ Posterior probabilities indicating student mastery per attribute. The dashed hor
 #| label: Plot - respondent proficiency
 
 (
-  pn.ggplot(attravg,
+  pn.ggplot(attrest,
             pn.aes('stu', 'estimate'))
   + pn.geom_point(alpha=.6, color='seagreen', size=1.5)
   + pn.geom_hline(yintercept=threshold, color='black', linetype='dashed')
@@ -374,6 +365,7 @@ gt(attr_w_export.drop(columns='anon_id').head(15)).tab_header(
     subtitle='Displaying first 15 respondents'
 )
 
+attr_w_export.to_csv(here(f'{resp_proficiency_list_directory}'))
 
 ```
 
@@ -385,7 +377,7 @@ Point estimates for Slipping ($s$) and Guessing ($g$) mapped dynamically across 
 #| label: plot-slipping-guessing
 
 (
-  pn.ggplot(sgavg, pn.aes(x='factor(item)', y='estimate'))
+  pn.ggplot(sgest, pn.aes(x='factor(item)', y='estimate'))
   + pn.geom_col(pn.aes(fill='type'), alpha=0.9)
   + pn.facet_wrap('type')
   + pn.coord_flip()
@@ -403,7 +395,7 @@ Point estimates for Slipping ($s$) and Guessing ($g$) mapped dynamically across 
 #| label: plot-slipping-guessing-dumbbell
 
 (
-  pn.ggplot(sgavg, pn.aes(x='factor(item)', y='estimate'))
+  pn.ggplot(sgest, pn.aes(x='factor(item)', y='estimate'))
   + pn.geom_line(pn.aes(group='item'), color='gray', alpha=0.5, size=1)
   + pn.geom_point(pn.aes(color='type'), size=3.5, alpha=0.9)
   + pn.coord_flip()
@@ -428,10 +420,10 @@ top_class_labels = class_prop.nlargest(6, 'estimate')['class_label'].tolist()
 boundary_labels = ['0' * num_attrs, '1' * num_attrs]
 selected_labels = list(set(top_class_labels + boundary_labels))
 
-piavg_subset = piavg[piavg['class_label'].isin(selected_labels)]
+piest_subset = piest[piest['class_label'].isin(selected_labels)]
 
 (
-  pn.ggplot(piavg_subset,
+  pn.ggplot(piest_subset,
             pn.aes('factor(item)', 'estimate'))
   + pn.geom_point(alpha=.7, color='seagreen')
   + pn.geom_hline(yintercept=.5, color='black', linetype='dashed')
@@ -451,44 +443,23 @@ piavg_subset = piavg[piavg['class_label'].isin(selected_labels)]
 #| label: Global Fit Indices
 
 # 1. Calculate RMSE based on marginal item pass rates
-rmse = np.sqrt(((ppc_df['observed_p'] - ppc_df['predicted_p'])**2).mean())
+rmse2 = np.sqrt(((ppc_df['observed_p'] - ppc_df['predicted_p'])**2).mean())
 
-# 2. Extract maximized log-likelihood from Stan's L-BFGS output
-log_lik = fitdf['lp__'].iloc[0]
+from sklearn.metrics import mean_squared_error
 
-# 3. Define sample size (n) and estimated parameters (k)
-# k = guessing (I) + slipping (I) + latent class proportions (C - 1)
-n = df_responses.shape[0]
-I = df_responses.shape[1]
-C = alpha.shape[0]
-k = (2 * I) + (C - 1)
+# calculate RMSE
+rmse = np.sqrt(mean_squared_error(ppc_df['observed_p'], ppc_df['predicted_p']))
 
-# 4. Compute Information Criteria
-bic = -2 * log_lik + k * np.log(n)
-sabic = -2 * log_lik + k * np.log((n + 2) / 24)
-
-# 5. Construct the metrics DataFrame
 fit_metrics = pd.DataFrame({
-    'Fit Index': [
-        'RMSE (Item Pass Rates)', 
-        'BIC', 
-        'Sample-Size Adjusted BIC (SABIC)'
-    ],
-    'Value': [rmse, bic, sabic]
-})
+    'design': [design],
+    'model': [model_type],
+    'prior': [''],
+    'est_type': [est_type],
+    'num_attr': [num_attr],
+    'rmse': [rmse]
+}, index=[0]).round(4)
 
-# Force string formatting to maintain exactly 4 decimal places
-fit_metrics['Value'] = fit_metrics['Value'].apply(lambda x: f"{x:.4f}")
-
-# 6. Generate and display the formatted table (removed the 'return')
-(
-    gt(fit_metrics)
-    .tab_header(
-        title='Global Model Fit Statistics',
-        subtitle='Calculated via maximized log-posterior and marginal item probabilities'
-    )
-    .opt_table_font(font="Arial")
-)
+fit_metrics.to_csv(here(f'fit_metrics/{model_type}_{design}_{est_type}_{num_attr}_fitmetrics.csv'))
 
 ```
 
@@ -501,7 +472,7 @@ Accuracy measures the mean maximum classification certainty, and consistency eva
 ```{python}
 #| label: Reliability metrics for model
 
-reliability = attravg.groupby('attr').agg(
+reliability = attrest.groupby('attr').agg(
     accuracy=('acc_comp', 'mean'),
     consistency=('cons_comp', 'mean')
 ).reset_index()

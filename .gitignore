@@ -92,3 +92,5 @@ reports/
 # Ignore Stan Cache
 dino_dina_model
 dino_dina_prior
+/.uvr/library/
+/.uvr/activate*

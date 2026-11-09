@@ -1,0 +1,471 @@
+---
+title: DCM Assessment Report
+subtitle: STAT 134 Su26 - Quiz 5 (5-Attribute Model)
+execute:
+  warning: false
+  message: false
+  eval: true
+  echo: false
+format:
+  typst:
+    toc-title: Contents
+    toc: true
+    toc-depth: 2
+    number-sections: true
+    number-depth: 3
+---
+
+```{r}
+#| label: Parameters
+#| tags: [parameters]
+
+threshold <- .8
+model_type <- 'DINA'
+design <- 'no_testlet'
+num_attr <- '5attr'
+est_type <- 'mle'
+
+attr1 <- 'expectations_of_functions'
+attr2 <- 'definition_of_variance'
+attr3 <- 'properties_of_expectation'
+attr4 <- 'expectations_of_famous_distributions'
+attr5 <- 'properties_of_variance'
+```
+
+```{r}
+#| output: false
+#| label: Packages
+
+library(uvr)
+init()
+lock()
+add(c("tidyverse", "glue"))
+add("Pablo-Najera/cdmTools")
+add("GDINA")
+add("here")
+add("janitor")
+add("see")
+add("gt")
+
+# pak::pak("pkgbuild")
+# pak::pak("zip")
+# install.packages('fungible', repos = c('https://nwaller.r-universe.dev', 'https://cloud.r-project.org'))
+# pak::pak("Pablo-Najera/cdmTools")
+# pak::pak("GDINA")
+
+sync()
+
+library(tidyverse)
+library(cdmTools)
+library(GDINA)
+library(glue)
+
+select <- dplyr::select
+cat_map <- purrr::map
+
+theme_set(theme_light())
+
+data_directory <- "data/stat_134_2025_quiz5.csv"
+q_directory <- "q_matrix/quiz5_q_5attr.csv"
+
+save_model_joblib_directory <- glue("data/joblib_models/{model_type}_{design}_{num_attr}_{est_type}.joblib")
+resp_proficieny_raw_list_directory = glue("data/mastery_lists/rlang_{model_type}_{design}_{num_attr}_{est_type}_resp_prof_raw.csv")
+resp_proficiency_list_directory <- glue("data/mastery_lists/rlang_{model_type}_{design}_{num_attr}_{est_type}_resp_prof_list.csv")
+```
+
+
+# Data Ingestion & Preprocessing
+
+```{r}
+#| label: DataFrame & Q-Matrix Loading
+
+df <- read_csv(here::here(glue('{data_directory}'))) |> 
+  select(
+    -c(
+      1,
+      item35,
+      anon_id # remove for cdmTools model
+    )
+  )
+df
+
+q <- read_csv(here::here(glue('{q_directory}'))) |>
+  janitor::clean_names() |>
+  filter(
+    item != 35
+  ) |>
+  select(
+    -c(
+      x1,
+      question, # remove if no testlet design,
+      item # remove for cdmTools model
+    )
+  )
+```
+
+```{r}
+q |> glimpse()
+```
+
+# Model 
+
+```{r}
+set.seed(7102026)
+dina_mod <- GDINA(dat = df,
+             Q = q,
+             model = "DINA",
+             att.dist = "saturated",
+             niter = 2000,
+             maxitr = 2000
+             )
+summary(dina_mod)
+```
+
+```{r}
+cat_map(
+  c("catprob", "delta", "gs", "itemprob"),
+  ~coef(dina_mod, .x, withSE = TRUE)
+)
+
+cat_map(
+  c("LCprob", "lambda"),
+  ~coef(dina_mod, .x)
+)
+```
+
+```{r}
+sg <- 
+coef(dina_mod, "gs") |>
+  as_tibble() |>
+  mutate(
+    item = attributes(coef(dina_mod, "gs"))$dimnames[[1]]
+  ) |>
+  relocate(
+    item,
+    .before = 'guessing'
+  ) |>
+  pivot_longer(-item)
+
+sg <-
+sg |>
+  mutate(
+    across(
+      c(
+        name,
+        item
+      ),
+      ~as.factor(.x)
+    ),
+    item = fct_relevel(
+      item,
+      cat_map(34:1, ~glue('Item {.x}'))
+    )
+  )
+
+sg |>
+  ggplot(
+    aes(
+      item,
+      value
+    )
+  ) +
+  geom_point(
+    aes(
+      color = name
+    )
+  ) +
+  coord_flip() +
+  facet_wrap(
+    vars(
+      name
+    )
+  ) +
+  see::scale_color_okabeito() +
+  theme(
+    legend.position = "none"
+  )
+```
+
+```{r}
+lat_class_prob_tbl <- coef(dina_mod, "LCprob") |>
+  as_tibble()
+
+lat_class_prob_tbl |> colnames() <- paste0('lc', lat_class_prob_tbl |> colnames())
+
+lat_class_prob_tbl <-
+lat_class_prob_tbl |>
+  mutate(
+    item = attributes(coef(dina_mod, "LCprob"))$dimnames[[1]],
+    item = str_to_lower(item)
+  ) |>
+  select(
+    item,
+    matches("lc")
+  )
+
+map2(
+  lat_class_prob_tbl |> select(-item),
+  lat_class_prob_tbl |> select(-item) |> colnames(),
+  ~ggplot(
+    lat_class_prob_tbl,
+    aes(
+      item,
+      .x
+    )
+  ) +
+  geom_point(
+    color = "seagreen"
+  ) +
+  coord_flip() +
+  geom_hline(
+    yintercept = .5, 
+    color = "black",
+    linetype = "dotted",
+    size = 1
+    ) +
+  labs(title = glue("{.y}"))
+)
+```
+
+```{r}
+set.seed(7102026)
+person_est <-
+cat_map(
+  c("mp", "MLE", "MAP"),
+  ~personparm(dina_mod, what = .x)
+)
+
+person_thresh80 <-
+person_est[[1]] |>
+  as_tibble() |>
+  mutate(
+    across(
+      everything(),
+      ~if_else(.x >= .8, 1, 0)
+    )
+  )
+
+person_est[[2]] |>
+  as_tibble() |>
+  head()
+
+person_est[[3]] |>
+  as_tibble() |>
+  head()
+
+
+write.csv(person_est[[1]] |>
+          as_tibble(),
+          resp_proficieny_raw_list_directory
+          )
+
+write.csv(person_thresh80,
+          resp_proficiency_list_directory
+          )
+```
+
+```{r}
+set.seed(7102026)
+cat_map(
+  c("MLE", "MAP"),
+  ~itemfit(dina_mod, person.sim = .x)
+)
+```
+
+```{r}
+set.seed(7102026)
+modelfit(dina_mod)
+```
+
+```{r}
+prev_tbl <-
+extract(dina_mod, "prevalence")
+
+prev_tbl <-
+tibble(
+  attr = attributes(extract(dina_mod, "prevalence")$all)$dimnames[[1]],
+  not_proficient = prev_tbl$all[1:5],
+  proficient = prev_tbl$all[6:10]
+) 
+
+prev_tbl <- prev_tbl |>
+    pivot_longer(-attr) 
+
+ggplot(
+  prev_tbl |>
+  mutate(
+    attr = fct_relevel(
+      attr,
+      c("A5", "A4", "A3", "A2", "A1")
+    )
+  ),
+  aes(
+    attr,
+    value
+  )
+) +
+geom_col(
+  aes(
+    fill = name
+  ),
+  color = "black"
+) +
+coord_flip() +
+see::scale_fill_okabeito()
+```
+
+```{r}
+extract(dina_mod, "discrim")
+```
+
+```{r}
+extract(dina_mod, "posterior.prob") |>
+  as_tibble() |>
+  pivot_longer(everything()) |>
+  ggplot(
+    aes(
+      name,
+      value
+    )
+  ) +
+  geom_col(
+    color = "black",
+    fill = "seagreen"
+  ) +
+  coord_flip()
+```
+
+```{r}
+#| label: Accuracy & Consistency
+CA(dina_mod)
+```
+
+```{r}
+#| label: RMSE from model-implied predictions
+
+# I x C matrix of P(correct | latent class) for each item
+lc_prob <- extract(dina_mod, what = "LCprob.parm")
+
+# N x C matrix of each respondent's posterior class-membership
+# probabilities (soft/EAP-style classification, not hard MAP/MLE)
+log_post <- indlogPost(dina_mod)
+post <- exp(log_post)
+post <- post / rowSums(post)
+
+# model-implied P(correct) per respondent x item = post %*% t(lc_prob)
+y_hat <- post %*% t(lc_prob)
+y_obs <- as.matrix(extract(dina_mod, "dat"))
+
+rmse_overall <- sqrt(mean((y_obs - y_hat)^2, na.rm = TRUE))
+
+rmse
+
+```
+
+```{r}
+estimated_correct <-
+y_hat |>
+  as_tibble() |>
+  janitor::clean_names() |>
+  mutate(
+    across(
+      everything(),
+      ~if_else(.x > .5, 1, 0)
+    ),
+    total = rowSums(
+      across(
+        everything()
+      )
+    )
+  ) |>
+  rowid_to_column()
+
+actual_correct <- 
+  extract(dina_mod, "dat") |>
+  mutate(
+    total = rowSums(
+      across(
+        everything()
+      )
+    )
+  ) |>
+  rowid_to_column()
+
+full_join(
+  actual_correct |>
+  mutate(dataset = "actual") |>
+  select(
+    rowid,
+    act_total = total,
+    dataset
+  ),
+  estimated_correct |>
+    mutate(dataset = "estimated") |>
+    select(
+      rowid,
+      est_total = total,
+      dataset
+  )
+) |>
+  pivot_longer(
+    -c(
+      rowid,
+      dataset
+    )
+  ) |>
+  group_by(
+    dataset
+  ) |>
+  count(
+    value
+  ) |>
+  ungroup() |>
+  drop_na(value) |>
+  ggplot(
+    aes(
+      value,
+      n
+    )
+  ) +
+  geom_point(
+    aes(
+      color = dataset
+    )
+  ) +
+  scale_x_continuous(
+    limits = c(1, 34),
+    breaks = seq(1, 34, 1)
+  ) +
+  see::scale_color_okabeito()
+
+```
+
+# Model Diagnostics: Actual vs. Predicted (Expected vs. Observed)
+
+This check evaluates MLE fit by comparing actual observed item pass rates against the probabilities predicted by the DINA model using a grouped bar chart. Substantial discrepancies between the bars indicate items where the model fails to fit the actual data structure.
+
+
+# Latent Classes
+
+Distribution of respondents across the dominant latent profile classes. This highlights the primary learning profiles present in the classroom by displaying only the most populated classes.
+
+# Proficiency/Mastery
+
+Posterior probabilities indicating student mastery per attribute. The dashed horizontal line represents the threshold ($>0.8$) for mastery assignment. This clean dot plot exposes whether student probabilities are clustering tightly at the boundaries (typical of MLE).
+
+
+# Item-Level Slipping & Guessing
+
+Point estimates for Slipping ($s$) and Guessing ($g$) mapped dynamically across all items. A dumbbell structure flags problematic items where the guessing parameter exceeds the non-guessing parameter, or where slipping is unusually high.
+
+
+
+# Item Correctness Probabilities across Latent Classes
+
+
+
+# Reliability
+
+Accuracy measures the mean maximum classification certainty, and consistency evaluates decision reproducibility.
+
+> *Note on perfect reliability metrics ($1.000$):* Optimization via L-BFGS MLE can drive individual posterior probabilities to boundary values ($0.0$ or $1.0$). When $p \in \{0, 1\}$, accuracy ($\max(p, 1-p)$) and consistency ($p^2 + (1-p)^2$) mathematically resolve to exactly $1.000$.

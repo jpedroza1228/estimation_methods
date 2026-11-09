@@ -34,8 +34,10 @@ model{
   array[I] real eta;
 
   for (i in 1:I){
-    slip[i] ~ beta(5, 20); // difference
-    guess[i] ~ beta(5, 20);
+    // slip[i] ~ beta(5, 20); 
+    // guess[i] ~ beta(5, 20);
+    slip[i] ~ beta(5, 25); 
+    guess[i] ~ beta(5, 25);
   }
   for (j in 1:J){
     for (c in 1:C){

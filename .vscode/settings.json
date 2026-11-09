@@ -1,0 +1,11 @@
+{
+  "positron.r.customBinaries": [
+    "/Users/jp/.uvr/r-versions/4.5.2/bin/R"
+  ],
+  "positron.r.customRootFolders": [
+    "/Users/jp/.uvr/r-versions"
+  ],
+  "positron.r.interpreters.default": "/Users/jp/.uvr/r-versions/4.5.2/bin/R",
+  "r.rpath.mac": "/Users/jp/.uvr/r-versions/4.5.2/bin/R",
+  "r.rterm.mac": "/Users/jp/.uvr/r-versions/4.5.2/bin/R"
+}
