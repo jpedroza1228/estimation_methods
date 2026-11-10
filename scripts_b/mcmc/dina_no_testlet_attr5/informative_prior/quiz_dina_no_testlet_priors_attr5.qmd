@@ -1,19 +1,23 @@
 ---
 title: "DCM Assessment Report"
 subtitle: "STAT 134 Su26 - Quiz 5"
-jupyter: .venv
+jupyter:
+  kernelspec:
+    display_name: .venv (3.14.7)
+    language: python
+    name: python3
 execute:
   warning: false
   message: false
   eval: true
   echo: false
-format: 
- typst:
-   toc-title: Contents
-   toc: true
-   toc-depth: 2
-   number-sections: true
-   number-depth: 3
+format:
+  typst:
+    toc-title: Contents
+    toc: true
+    toc-depth: 2
+    number-sections: true
+    number-depth: 3
 ---
 
 ```{python}
@@ -22,12 +26,15 @@ format:
 
 threshold = .8
 model_type = 'DINA'
+design = 'no_testlet'
+num_attr = '5attr'
+prior = 'informative'
 
-attr1 = 'expectations_of_functions'
-attr2 = 'definition_of_variance'
-attr3 = 'properties_of_expectation'
-attr4 = 'expectations_of_famous_distributions'
-attr5 = 'properties_of_variance'
+attr1 = 'expect_fun'
+attr2 = 'def_var'
+attr3 = 'prop_expect'
+attr4 = 'expect_famous_dist'
+attr5 = 'prop_var'
 ```
 
 ```{python}
@@ -57,27 +64,15 @@ pn.theme_set(pn.theme_classic())
 
 data_directory = 'data/stat_134_2025_quiz5.csv'
 q_directory = 'q_matrix/quiz5_q_5attr.csv'
-stan_model_directory = 'stan_models/no_testlet/non_informative_priors/dino_dina_model.stan'
-stan_prior_directory = 'stan_models/no_testlet/non_informative_priors/dino_dina_prior.stan'
-diagnostics_directory = 'data/diagnostics/dina_no_testlet_attr5_model_diagnostics.csv'
-save_model_joblib_directory = 'data/joblib_models/no_inform_prior_no_testlet_5attr_dina_model.joblib'
-save_prior_joblib_directory = 'data/joblib_models/no_inform_prior_no_testlet_5attr_dina_prior.joblib'
-item_ppp_directory = 'data/item_ppp/no_inform_no_testlet_attr5_dina.csv'
-resp_proficieny_raw_list_directory = 'data/mastery_lists/resp_prof_raw_no_inform_no_testlet_attr5_dina.csv'
-resp_proficiency_list_directory = 'data/mastery_lists/respondent_proficiency_list_attr5.csv'
+stan_model_directory = 'stan_models/no_testlet/slightly_informative_priors/dino_dina_model.stan'
+stan_prior_directory = 'stan_models/no_testlet/slightly_informative_priors/dino_dina_prior.stan'
 
-# Automatically create all necessary parent directories if they don't exist
-file_paths = [
-    diagnostics_directory,
-    save_model_joblib_directory,
-    save_prior_joblib_directory,
-    item_ppp_directory,
-    resp_proficieny_raw_list_directory,
-    resp_proficiency_list_directory
-]
-
-for file_path in file_paths:
-    Path(here(file_path)).parent.mkdir(parents=True, exist_ok=True)
+diagnostics_directory = f'data/diagnostics/{model_type}_{design}_{num_attr}_{prior}_diagnostics.csv'
+save_model_joblib_directory = f'data/joblib_models/{model_type}_{design}_{num_attr}_{prior}.joblib'
+save_prior_joblib_directory = f'data/joblib_models/prior_{model_type}_{design}_{num_attr}_{prior}.joblib'
+item_ppp_directory = f'data/item_ppp/ppp_{model_type}_{design}_{num_attr}_{prior}.csv'
+resp_proficieny_raw_list_directory = f'data/mastery_lists/{model_type}_{design}_{num_attr}_{prior}_resp_prof_raw.csv'
+resp_proficiency_list_directory = f'data/mastery_lists/{model_type}_{design}_{num_attr}_{prior}_resp_prof_list.csv'
 ```
 
 # Creating Necessary DataFrames & Matrices
@@ -141,7 +136,7 @@ if model_type == 'DINO':
   # DINO model
   for i in range(q.drop(columns = 'item').shape[0]):
     for c in range(alpha.drop(columns = ['index', 'class_label']).shape[0]):
-      dino_eta[i,c] = 1 - np.prod((1 - alpha.drop(columns = ['index', 'class_label']).to_numpy()[c, :]) ** q.drop(columns = 'item').to_numpy()[i, :])
+      xi[i,c] = 1 - np.prod((1 - alpha.drop(columns = ['index', 'class_label']).to_numpy()[c, :]) ** q.drop(columns = 'item').to_numpy()[i, :])
 
 elif model_type == 'DINA':
   # DINA model
@@ -527,6 +522,7 @@ obs_t_series['item'] = obs_t_series['item'].str.replace('item', '')
 obs_t_series['item'] = obs_t_series['item'].astype(float)
 
 y_long_avg = ydcm_long.groupby(['item', 'draw'])['value'].agg(['mean', 'std']).reset_index()
+
 y_long_avg['n'] = stu_n
 
 y_long_avg['t_draw'] = y_long_avg['mean']/((y_long_avg['std'] + 1e-10)/np.sqrt(y_long_avg['n']))
@@ -611,9 +607,9 @@ The following code calculates "t-values" to compare to the actual data to use a 
 
 print('Average correct per item:', y_long_avg['t_draw'].describe())
 
-t_compare_list = [np.mean(y_long_avg.loc[(y_long_avg['item'] == i), 't_draw'] > y_long_avg.loc[(y_long_avg['item'] == i), 'observed_t']) for i in np.arange(stan_dict['I'])]
+t_compare_list = [np.mean(y_long_avg.loc[(y_long_avg['item'] == i), 't_draw'] > y_long_avg.loc[(y_long_avg['item'] == i), 'observed_t']) for i in np.arange(1, stan_dict['I'])]
 
-gt(pd.DataFrame({'item': np.arange(stan_dict['I']),
+gt(pd.DataFrame({'item': np.arange(1, stan_dict['I']),
                  't_prop_over': t_compare_list}).round(2)).tab_header(title = 'Item Level PPP')
 
 # TODO get this to work
@@ -634,7 +630,7 @@ gt(pd.DataFrame({'item': np.arange(stan_dict['I']),
 ```{python}
 #| label: ppp dataset
 
-pd.DataFrame({'item': np.arange(stan_dict['I']),
+pd.DataFrame({'item': np.arange(1, stan_dict['I']),
               't_prop_over': t_compare_list}).to_csv(here(f'{item_ppp_directory}'))
 ```
 
@@ -895,4 +891,30 @@ reliability = attravg.groupby('attr').agg(
 ).reset_index()
 
 gt(reliability.round(3)).tab_header(title = 'Accuracy & Consistency')
+```
+
+## RMSE
+
+```{python}
+ydcm_wide_avg = ydcm_wide.groupby('stu')[ydcm_wide.filter(regex = 'item').columns.tolist()].agg(np.mean).reset_index()
+
+ydcm_wide_avg = ydcm_wide_avg.drop(columns = 'stu')
+ydcm_wide_avg
+```
+
+```{python}
+from sklearn.metrics import mean_squared_error
+
+# calculate RMSE
+rmse = np.sqrt(mean_squared_error(y_item.drop(columns = 'total').values.flatten(), ydcm_wide_avg.values.flatten()))
+
+fit_metrics = pd.DataFrame({
+    'design': [design],
+    'model': [model_type],
+    'prior': [prior],
+    'num_attr': [num_attr],
+    'rmse': [rmse]
+}, index=[0]).round(4)
+
+fit_metrics.to_csv(here(f'fit_metrics/output_Boting/{model_type}_{design}_{prior}_{num_attr}_fitmetrics.csv'))
 ```

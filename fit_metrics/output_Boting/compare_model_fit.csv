@@ -1,0 +1,3 @@
+,design,model,prior,num_attr,rmse
+1,no_testlet,RDINO,informative,5attr,0.4763
+0,no_testlet,RDINO,uniform,5attr,0.4765
