@@ -1,3 +1,11 @@
 ,design,model,prior,num_attr,rmse
-1,no_testlet,RDINO,informative,5attr,0.4763
-0,no_testlet,RDINO,uniform,5attr,0.4765
+3,no_testlet,DINA,uniform,5attr,0.3995
+4,no_testlet,DINO,uniform,5attr,0.3999
+2,no_testlet,DINA,informative,5attr,0.4107
+6,no_testlet,DINO,informative,5attr,0.4114
+8,no_testlet,RDINA,uniform,5attr,0.4665
+5,no_testlet,RDINA,informative,5attr,0.4666
+0,no_testlet,RDINO,informative,5attr,0.4763
+9,no_testlet,RDINO,informative,5attr,0.4763
+1,no_testlet,RDINO,uniform,5attr,0.4765
+7,no_testlet,RDINO,uniform,5attr,0.4765
