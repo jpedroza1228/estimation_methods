@@ -128,14 +128,16 @@ For an observed response matrix $\mathbf{Y}$ of $N$ respondents and $J$ items,
 the marginal log-likelihood, integrating over the $L$ discrete latent classes, 
 is identical in structure across the DINA, DINO, rDINA, and rDINO models. 
 The formulation models the probability of the observed response $Y_{ij} \in \{0, 1\}$ 
-given the item parameters (slipping $\mathbf{s}$, guessing $\mathbf{g}$) 
+given the item noise parameters $\boldsymbol{\theta}$ 
 and latent class proportions $\boldsymbol{\pi}$:
 
-$$ \log L(\mathbf{s}, \mathbf{g}, \boldsymbol{\pi} \mid \mathbf{Y}) 
+$$ \log L(\boldsymbol{\theta}, \boldsymbol{\pi} \mid \mathbf{Y}) 
 = \sum_{i=1}^N \log \left( \sum_{l=1}^L \pi_l 
 \prod_{j=1}^J P_{jl}^{Y_{ij}} (1 - P_{jl})^{1 - Y_{ij}} \right) $$
 
-where $P_{jl}$ represents the probability of a respondent in latent class $l$ 
+where $\boldsymbol{\theta} = (\mathbf{s}, \mathbf{g})$ for the DINA and DINO models, 
+and $\boldsymbol{\theta} = \mathbf{e}$ for the rDINA and rDINO models. 
+$P_{jl}$ represents the probability of a respondent in latent class $l$ 
 correctly answering item $j$. The definition of $P_{jl}$ depends on the 
 specific deterministic input (e.g., the $\xi_{jl}$ or $\eta_{jl}$ matrices 
 derived from the Q-matrix) dictating whether the class possesses 
@@ -148,38 +150,36 @@ and fully Bayesian Markov Chain Monte Carlo (MCMC).
 These are controlled by modifying the objective function via 
 the `target +=` statement and the chosen estimation algorithm.
 
-\subsubsection{Maximum Likelihood Estimation (MLE / Flat Posterior)}
-When optimized using the L-BFGS algorithm without explicit prior distributions, 
-the model implies $s_j, g_j \sim \text{Beta}(1, 1)$. 
-This prior acts as a uniform distribution over $[0, 1]$. 
-Because the log-density of a $\text{Beta}(1,1)$ distribution is $0$, 
-it adds a constant to the log-posterior. The target corresponds purely to the MLE:
+\subsubsection{!!!Maximum Likelihood Estimation (MLE)!!!}
+
+
+We are using R packages for MLE. The theory will update.
+
 
 $$ \log P(\boldsymbol{\theta} \mid \mathbf{Y}) 
 \propto \log L(\mathbf{s}, \mathbf{g}, \boldsymbol{\pi} \mid \mathbf{Y}) $$
 
-While computationally efficient, MLE point estimates in sparse diagnostic data 
-often drift toward boundaries ($0$ or $1$). 
-Mathematically, this forces reliability metrics like accuracy ($\max(p, 1-p)$) 
-and consistency ($p^2 + (1-p)^2$) to artificially resolve to exactly $1.000$.
+
 
 \subsubsection{Maximum A Posteriori (MAP / Regularization)}
-To regularize the model and prevent boundary estimates (e.g., $s_j=0$ or $g_j=0$), 
+To regularize the model and prevent boundary estimates (e.g., $s_j=0$, $g_j=0$, or $e_j=0$), 
 mildly informative priors are applied and optimized via L-BFGS. 
-Specifically, $s_j, g_j \sim \text{Beta}(5, 20)$. 
+Specifically, $s_j, g_j \sim \text{Beta}(5, 20)$ for unrestricted models, 
+and $e_j \sim \text{Beta}(5, 20)$ for restricted models. 
 This reflects prior substantive knowledge that slipping and guessing 
 parameters generally fall below $0.30$, with an expected mean of $5 / (5+20) = 0.20$.
 
 The regularized log-posterior (penalized log-likelihood) becomes:
 
 $$ \log P(\boldsymbol{\theta} \mid \mathbf{Y}) 
-\propto \log L(\boldsymbol{\theta} \mid \mathbf{Y}) 
-+ \sum_{j=1}^J \Big[ (5 - 1)\log(s_j) + (20 - 1)\log(1 - s_j) \Big] + \dots $$
+\propto \log L(\boldsymbol{\theta}, \boldsymbol{\pi} \mid \mathbf{Y}) 
++ \sum_{j=1}^J \Big[ (5 - 1)\log(\theta_j) + (20 - 1)\log(1 - \theta_j) \Big] + \dots $$
 
 \begin{theorem}[Well-Posedness of Regularized Optimization]\label{thm:well_posed}
 Under the $\text{Beta}(5, 20)$ prior, the shape parameters strictly exceed $1$. 
-This ensures that the penalization terms $\log(s_j)$ and $\log(1-s_j)$ 
-force the objective function toward $-\infty$ as $s_j \to 0$ or $s_j \to 1$. 
+This ensures that the penalization terms $\log(\theta_j)$ and $\log(1-\theta_j)$ 
+force the objective function toward $-\infty$ as any noise parameter 
+($s_j, g_j$, or $e_j$) approaches $0$ or $1$. 
 Thus, the MAP estimates are strictly constrained to the interior of the 
 parameter space $(0, 1)$, resolving numerical instabilities associated 
 with zero-counts.
@@ -190,7 +190,8 @@ with zero-counts.
 For full uncertainty quantification, the models are additionally estimated via MCMC 
 utilizing Stan's Hamiltonian Monte Carlo (HMC) with the No-U-Turn Sampler (NUTS). 
 Unlike MLE/MAP which yield point estimates, MCMC yields full posterior 
-distributions for $\mathbf{s}$, $\mathbf{g}$, and class memberships. 
+distributions for the noise parameters ($\mathbf{s}$ and $\mathbf{g}$, or $\mathbf{e}$) 
+and class memberships. 
 
 MCMC estimation is deployed under two prior conditions:
 \begin{itemize}
@@ -317,44 +318,44 @@ interact compensatorily rather than conjunctively for that specific item.
 
 \subsection{Proof of Theorem \ref{thm:well_posed}} \label{app:proof_well_posed}
 \begin{proof}
-Let the objective function for the slipping parameter $s_j$ 
-(and symmetrically for $g_j$) be denoted as $f(s_j)$. 
-Isolating the terms involving $s_j$, the regularized log-posterior is:
+Let the objective function for a generic noise parameter $\theta_j$ 
+(representing $s_j$, $g_j$, or $e_j$) be denoted as $f(\theta_j)$. 
+Isolating the terms involving $\theta_j$, the regularized log-posterior is:
 \begin{equation}
-    f(s_j) = \ell(s_j \mid \mathbf{Y}, \mathbf{g}, \boldsymbol{\pi}) 
-    + (\alpha - 1)\log(s_j) + (\beta - 1)\log(1 - s_j)
+    f(\theta_j) = \ell(\theta_j \mid \mathbf{Y}, \dots) 
+    + (\alpha - 1)\log(\theta_j) + (\beta - 1)\log(1 - \theta_j)
 \end{equation}
-where $\ell(s_j \mid \dots)$ is the marginal log-likelihood component 
-associated with $s_j$, and the Beta prior shape parameters are 
+where $\ell(\theta_j \mid \dots)$ is the marginal log-likelihood component 
+associated with $\theta_j$, and the Beta prior shape parameters are 
 $\alpha = 5$ and $\beta = 20$.
 
 By definition, the likelihood function returns a probability bounded by $[0, 1]$. 
 Therefore, its logarithm is bounded above such that 
-$\ell(s_j \mid \dots) \le 0$ for all $s_j \in [0, 1]$.
+$\ell(\theta_j \mid \dots) \le 0$ for all $\theta_j \in [0, 1]$.
 
-We analyze the limits of the objective function $f(s_j)$ 
+We analyze the limits of the objective function $f(\theta_j)$ 
 as the parameter approaches the boundaries of its domain:
 \begin{itemize}
-    \item As $s_j \to 0^+$, the penalization term 
-    $(\alpha - 1)\log(s_j) = 4\log(s_j) \to -\infty$.
-    \item As $s_j \to 1^-$, the penalization term 
-    $(\beta - 1)\log(1 - s_j) = 19\log(1 - s_j) \to -\infty$.
+    \item As $\theta_j \to 0^+$, the penalization term 
+    $(\alpha - 1)\log(\theta_j) = 4\log(\theta_j) \to -\infty$.
+    \item As $\theta_j \to 1^-$, the penalization term 
+    $(\beta - 1)\log(1 - \theta_j) = 19\log(1 - \theta_j) \to -\infty$.
 \end{itemize}
 
-Because the log-likelihood term $\ell(s_j \mid \dots)$ is bounded 
+Because the log-likelihood term $\ell(\theta_j \mid \dots)$ is bounded 
 above by $0$ and cannot diverge to $+\infty$ to cancel out the penalty, 
 the entire objective function diverges to negative infinity at the boundaries:
 \begin{equation}
-    \lim_{s_j \to 0^+} f(s_j) = -\infty \quad \text{and} \quad \lim_{s_j \to 1^-} f(s_j) = -\infty
+    \lim_{\theta_j \to 0^+} f(\theta_j) = -\infty \quad \text{and} \quad \lim_{\theta_j \to 1^-} f(\theta_j) = -\infty
 \end{equation}
 
-Since $f(s_j)$ is a continuous function on the open interval $(0, 1)$ 
+Since $f(\theta_j)$ is a continuous function on the open interval $(0, 1)$ 
 and tends to $-\infty$ at both boundaries, by the Extreme Value Theorem 
 (adapted for open intervals with infinite limits), the function must achieve 
 its global maximum at some point strictly within the interior of the interval. 
 
-Thus, the MAP estimate $\hat{s}_j = \arg\max_{s_j} f(s_j)$ 
-is guaranteed to satisfy $0 < \hat{s}_j < 1$. The same holds for $g_j$. 
+Thus, the MAP estimate $\hat{\theta}_j = \arg\max_{\theta_j} f(\theta_j)$ 
+is guaranteed to satisfy $0 < \hat{\theta}_j < 1$. 
 This strict bounding theoretically precludes any point estimate from reaching 
 the absorbing states of $0$ or $1$, thereby guaranteeing numerical stability 
 during L-BFGS optimization.

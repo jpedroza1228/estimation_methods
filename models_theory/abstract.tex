@@ -1,0 +1,123 @@
+%\documentclass[12pt,oneside]{amsart}
+\documentclass{scrartcl}
+
+%\documentclass{article}
+
+\usepackage{amsthm,amsmath,amssymb}
+\usepackage[numbers]{natbib}
+
+%\usepackage[colorlinks]{hyperref}
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks,%
+    citecolor=black,%
+    filecolor=black,%
+    linkcolor=black,%
+    urlcolor=black
+}
+\usepackage{hypernat}
+\usepackage[top=2.5cm, bottom=2.5cm, left=2.8cm,
+right=2.8cm]{geometry}
+\usepackage{graphicx} 
+\usepackage{pdfpages}
+
+%\setlength{\parskip}{0pt}
+%\setlength{\parsep}{0pt}
+%\setlength{\headsep}{0pt}
+%\setlength{\topskip}{0pt}
+%\setlength{\topmargin}{0pt}
+%\setlength{\topsep}{0pt}
+%\setlength{\partopsep}{0pt}
+
+\linespread{1}
+
+%\usepackage{marvosym}
+
+%\textwidth = 6.5 in \textheight = 9.2 in \oddsidemargin = 0.0 in
+%\evensidemargin = 0.0 in \topmargin = -0.0 in \headheight = 0.0 in
+%\headsep = 0.0in \parskip = 0.0in \parindent = 0.0in
+%\def\baselinestretch{0.871}
+
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{problem}[theorem]{Problem}
+\newtheorem{fact}[theorem]{Fact}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{defn}[theorem]{Definition}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{remark}{Remark}[section]
+\newtheorem{example}[theorem]{Example}
+
+\newcommand{\E}{{\mathbb E}}
+\newcommand{\se}{{\mathcal{E}}}
+\newcommand{\R}{{\mathbb R}}
+\renewcommand{\P}{{\mathbb P}}
+\newcommand{\ac}{{\mathcal{A}}}
+\newcommand{\A}{{\mathcal{A}}}
+\newcommand{\B}{{\mathcal{B}}}
+\newcommand{\C}{{\mathcal{C}}}
+\newcommand{\M}{{\mathcal{M}}}
+\newcommand{\Mf}{{\mathfrak{M}}}
+\newcommand{\T}{{\mathcal{T}}}
+\newcommand{\Z}{{\mathcal{Z}}}
+\newcommand{\K}{{\mathcal{K}}}
+\newcommand{\lc}{{\mathcal{L}}}
+\newcommand{\Ps}{{\mathcal{P}}}
+\newcommand{\G}{{\mathcal{G}}}
+\newcommand{\pa}{{\mathring{p}}}
+\newcommand{\F}{{\cal F}}
+\newcommand{\samp}{{\mathcal{X}}}
+\newcommand{\X}{{\mathcal{X}}}
+\newcommand{\hi}{{\hat{\Phi}}}
+\newcommand{\data}{{\text{data}}}
+
+\newcounter{rcnt}[section]
+\renewcommand{\thercnt}{(\roman{rcnt})}
+
+\def\qt#1{\qquad\text{#1}}
+
+\def\argmin{\mathop{\rm argmin}}
+\def\argmax{\mathop{\rm argmax}}
+
+
+\setlength{\parskip}{1.4 \medskipamount}
+%\sloppy
+%\linespread{1.3}
+
+\begin{document}
+
+\title{\textbf{Diagnostic Classification Models: Rigorous Mathematical 
+Formulation of DINA, DINO, rDINA, and rDINO Models 
+with Prior Specifications}}
+\author{\textbf{Jonathon A. Pedroza \& Boting Zhang}}
+\date{\today}
+
+\maketitle
+
+
+\begin{abstract}
+Diagnostic classification models (DCMs) infer a respondent's latent mastery profile from 
+multivariate binary item responses. This project formulates and compares conjunctive and 
+disjunctive DCMs for a five-attribute probability-and-statistics assessment. 
+Let $Y_{ij}\in\{0,1\}$ denote the response of respondent $i$ to item $j$, and 
+let $Z_i\in\{1,\ldots,2^K\}$ index the respondent's latent attribute class induced 
+by a prespecified $Q$-matrix. Conditional on $Z_i=l$, responses are modeled as independent 
+Bernoulli variables with success probabilities determined by an ideal-response indicator: 
+the DINA model uses an AND rule, whereas the DINO model uses an OR rule. The unrestricted 
+models estimate item-specific slipping and guessing parameters; the restricted rDINA and 
+rDINO models replace these by a common error parameter. Marginalizing over the $2^K$ latent 
+classes yields a finite-mixture likelihood with unknown class proportions. We compare 
+maximum likelihood estimation, maximum a posteriori estimation, and Bayesian posterior 
+inference by Hamiltonian Monte Carlo under uniform and weakly informative Beta priors on 
+item-error parameters. The analysis evaluates the effect of structural restrictions and 
+regularization on numerical stability, latent-class recovery, posterior uncertainty, 
+and predictive adequacy using posterior predictive replications, item-level discrepancies, 
+root mean squared error. In particular, the study treats 
+prior specification as a statistical regularization device for mitigating boundary 
+solutions in sparse latent-class models, rather than solely as a subjective Bayesian input. 
+The resulting workflow provides a reproducible framework for estimating, diagnosing, and 
+comparing cognitively interpretable latent-variable models for educational assessment data.
+\end{abstract}
+
+\end{document}
