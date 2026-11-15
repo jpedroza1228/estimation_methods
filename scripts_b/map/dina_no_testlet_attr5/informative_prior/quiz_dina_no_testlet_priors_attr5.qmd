@@ -28,7 +28,7 @@ threshold = .8
 model_type = 'DINA'
 design = 'no_testlet'
 num_attr = '5attr'
-prior ='MAP'
+prior ='MAP_informative'
 
 attr1 = 'expect_fun'
 attr2 = 'def_var'

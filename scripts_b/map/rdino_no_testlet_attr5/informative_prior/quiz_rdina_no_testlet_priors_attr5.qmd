@@ -1,0 +1,544 @@
+---
+title: "DCM Assessment Report"
+subtitle: "STAT 134 Su26 - Quiz 5 (MAP Estimation)"
+jupyter:
+  kernelspec:
+    display_name: .venv (3.14.7)
+    language: python
+    name: python3
+execute:
+  warning: false
+  message: false
+  eval: true
+  echo: false
+format:
+  typst:
+    toc-title: Contents
+    toc: true
+    toc-depth: 2
+    number-sections: true
+    number-depth: 3
+---
+
+```{python}
+#| tags: [parameters]
+#| label: Parameters
+
+threshold = .8
+model_type = 'RDINO'
+design = 'no_testlet'
+num_attr = '5attr'
+prior = 'MAP_informative'
+
+attr1 = 'expect_fun'
+attr2 = 'def_var'
+attr3 = 'prop_expect'
+attr4 = 'expect_famous_dist'
+attr5 = 'prop_var'
+
+```
+
+```{python}
+#| output: false
+#| label: Packages
+
+import pandas as pd
+import numpy as np
+import matplotlib
+import plotnine as pn
+from janitor import clean_names
+from great_tables import GT as gt
+import matplotlib.pyplot as plt
+from pyhere import here
+import arviz_base as azb
+import arviz_plots as azp
+import arviz_stats as azs
+from pathlib import Path
+import tempfile
+from cmdstanpy import CmdStanModel
+import joblib
+import os
+from sklearn.metrics import mean_squared_error
+
+pd.set_option('display.max_columns', None)
+matplotlib.rcParams.update({'savefig.bbox': 'tight'})
+pn.theme_set(pn.theme_classic())
+
+data_directory = 'data/stat_134_2025_quiz5.csv'
+q_directory = 'q_matrix/quiz5_q_5attr.csv'
+stan_model_directory = 'stan_models/no_testlet/slightly_informative_priors/rdino_rdina_model.stan'
+stan_prior_directory = 'stan_models/no_testlet/slightly_informative_priors/rdino_rdina_prior.stan'
+
+diagnostics_directory = f'data/diagnostics/{model_type}_{design}_{num_attr}_{prior}_diagnostics.csv'
+save_model_joblib_directory = f'data/joblib_models/{model_type}_{design}_{num_attr}_{prior}.joblib'
+save_prior_joblib_directory = f'data/joblib_models/prior_{model_type}_{design}_{num_attr}_{prior}.joblib'
+item_ppp_directory = f'data/item_ppp/ppp_{model_type}_{design}_{num_attr}_{prior}.csv'
+resp_proficieny_raw_list_directory = f'data/mastery_lists/{model_type}_{design}_{num_attr}_{prior}_resp_prof_raw.csv'
+resp_proficiency_list_directory = f'data/mastery_lists/{model_type}_{design}_{num_attr}_{prior}_resp_prof_list.csv'
+
+```
+
+# Creating Necessary DataFrames & Matrices
+
+```{python}
+#| label: DataFrame & Q-Matrix
+
+df = pd.read_csv(here(f'{data_directory}')).drop(columns = 'Unnamed: 0')
+q = pd.read_csv(here(f'{q_directory}')).clean_names(case_type = 'snake').drop(columns = 'unnamed_0')
+q['item'] = ['item' + str(i) for i in q['item']]
+
+# if no testlet, run this code
+q = q.drop(columns = 'question')
+
+print(df.head())
+print(q.head())
+
+```
+
+```{python}
+# removing final question because all scored 1 (typo in quiz)
+df = df.drop(columns = 'item35')
+df.head()
+
+```
+
+```{python}
+# dropping the final skill because only used once and no variation
+# q = q.drop(columns = 'total_variance')
+q = q.loc[q['item'] != 'item35']
+q.head()
+
+```
+
+## Attribute Profile Matrix
+
+```{python}
+#| label: Attribute profile matrix
+
+alpha = pd.DataFrame([(a, b, c, d, e) for a in np.arange(2) for b in np.arange(2) for c in np.arange(2) for d in np.arange(2) for e in np.arange(2)])
+      
+alpha = alpha.rename(columns = {0: 'attr1',
+                                1: 'attr2',
+                                2: 'attr3',
+                                3: 'attr4',
+                                4: 'attr5'})
+
+alpha['class_label'] = alpha.astype(int).astype(str).agg(''.join, axis = 1)
+alpha = alpha.reset_index()
+alpha['index'] = alpha['index'] + 1
+
+print(alpha.head())
+print(alpha.shape)
+
+```
+
+## Global Attribute Mastery Indicator Matrix
+
+```{python}
+#| label: Global attribute mastery
+
+xi = np.zeros((q.shape[0], alpha.shape[0]), dtype = int)
+
+if model_type == 'DINO':
+  # DINO model
+  for i in range(q.drop(columns = 'item').shape[0]):
+    for c in range(alpha.drop(columns = ['index', 'class_label']).shape[0]):
+      xi[i,c] = 1 - np.prod((1 - alpha.drop(columns = ['index', 'class_label']).to_numpy()[c, :]) ** q.drop(columns = 'item').to_numpy()[i, :])
+
+elif model_type == 'DINA':
+  # DINA model
+  for i in range(q.drop(columns = 'item').shape[0]):
+    for c in range(alpha.drop(columns = ['index', 'class_label']).shape[0]):
+      xi[i,c] = np.prod(alpha.drop(columns = ['index', 'class_label']).to_numpy()[c, :] ** q.drop(columns = 'item').to_numpy()[i, :])
+
+```
+
+```{python}
+#| label: Stan dictionary
+
+stan_dict = {
+  'J': df.drop(columns = 'anon_id').shape[0],
+  'I': df.drop(columns = 'anon_id').shape[1],
+  'C': alpha.drop(columns = ['class_label', 'index']).shape[0],
+  'K': q.drop(columns = 'item').shape[1],
+  'Y': df.drop(columns = 'anon_id').to_numpy(),
+  'Q': q.drop(columns = 'item').to_numpy(),
+  'alpha': alpha.drop(columns = ['class_label', 'index']).to_numpy(),
+  'xi': xi
+}
+
+```
+
+# Stan Code (MAP Estimation)
+
+```{python}
+#| label: prior-only and model; saved diagnostics
+#| output: false
+
+file = os.path.join(here(f'{stan_model_directory}'))
+model = CmdStanModel(stan_file = file,
+                     cpp_options = {'STAN_THREADS': 'TRUE'})
+
+np.random.seed(7102026)
+  
+# Executing MAP Estimation via optimization (jacobian = True ensures prior density is included)
+fit = model.optimize(data=stan_dict, jacobian=True)
+
+# MCMC specific objects like fit.summary() do not apply to MAP. 
+# We'll save the MAP model object directly.
+joblib.dump([model, fit],
+            here(f'{save_model_joblib_directory}'),
+            compress = 3)
+
+```
+
+```{python}
+#| label: Functions
+#| output: false
+
+def q_lower(x):
+    return x.quantile(.025) if not x.empty else np.nan
+  
+def q_upper(x):
+    return x.quantile(.975) if not x.empty else np.nan
+
+```
+
+```{python}
+#| label: Stan MAP data extraction
+#| output: false
+
+# Extracts the single row DataFrame containing MAP point estimates
+fitdf = fit.optimized_params_pd
+
+# ArviZ plotting and idata structures require MCMC draws. 
+# Since we are using MAP (point estimates), we comment out azb.from_cmdstanpy.
+# idata = azb.from_cmdstanpy(...)
+
+```
+
+# Diagnostics & Distributions
+
+*Note: MCMC-specific diagnostics (like ESS_bulk, R hat, and Trace Plots) and Prior vs Posterior density overlaps are disabled for this run because Maximum a Posteriori (MAP) estimation yields single point estimates rather than sampled posterior distributions.*
+
+```{python}
+# MCMC TRACE PLOTS COMMENTED OUT FOR MAP ESTIMATION
+# azp.plot_trace(idata, var_names = ['slip'])
+# azp.plot_trace(idata, var_names = ['guess'])
+# azp.plot_trace(idata, var_names = ['nu'])
+# azp.plot_prior_posterior(idata, var_names = ['slip'], kind = 'kde')
+
+```
+
+## Item-Level Data Structuring
+
+```{python}
+#| label: All code run for plots/tables
+
+# noise
+noise = fitdf.filter(regex = 'noise').reset_index()
+noise = noise.rename(columns = {'index': 'draw'})
+
+noiselong = noise.melt(id_vars = 'draw')
+
+# Extract parameter type and item index using regex (handles bracketed and unbracketed variables)
+noiselong[['type', 'item']] = noiselong['variable'].str.extract(r'([^\[]+)(?:\[(.*)\])?')
+
+# Fill NaN with 0 for global parameters that lack an item index
+noiselong['item'] = noiselong['item'].fillna(0)
+
+noiselong = noiselong[['draw', 'type', 'item', 'value']]
+noiselong[['draw', 'item']] = noiselong[['draw', 'item']].astype(int)
+
+# Grouping by item and type to match structural logic
+noise_group = noiselong.groupby(['item', 'type'])
+
+noiseavg = pd.DataFrame({
+  'mean': noise_group['value'].mean(),
+  'std': noise_group['value'].std().fillna(0),
+  'q_lower': noise_group['value'].agg(q_lower),
+  'q_upper': noise_group['value'].agg(q_upper)
+}).reset_index()
+
+
+# pi matrix (classes getting items correct)
+pidf = fitdf.filter(regex = 'pi').reset_index()
+pidf = pidf.rename(columns = {'index': 'draw'})
+pilong = pidf.melt(id_vars = 'draw')
+pilong['variable'] = pilong['variable'].str.replace('pi[', '')
+pilong['variable'] = pilong['variable'].str.replace(']', '')
+pilong[['item', 'latclass']] = pilong['variable'].str.split(',', expand = True)
+pilong = pilong[['draw', 'item', 'latclass', 'value']]
+pilong[['draw', 'item', 'latclass']] = pilong[['draw', 'item', 'latclass']].astype(int)
+
+piavg = pilong.groupby(['item', 'latclass'])['value'].agg(['mean', 'std', q_lower, q_upper]).reset_index()
+
+piavg = piavg.merge(alpha, 'left', left_on = 'latclass', right_on = 'index')
+
+# replicated data
+ydcm = fitdf.filter(regex = '^y_rep')
+
+# calculations for odds ratios/conditional probabilities
+ydcm_long = ydcm.melt()
+
+ydcm_long['variable'] = ydcm_long['variable'].str.replace('y_rep[', '')
+ydcm_long['variable'] = ydcm_long['variable'].str.replace(']', '')
+ydcm_long[['stu', 'item']] = ydcm_long['variable'].str.split(',', expand = True)
+ydcm_long = ydcm_long[['stu', 'item', 'value']]
+ydcm_long[['stu', 'item']] = ydcm_long[['stu', 'item']].astype(int)
+ydcm_long['draw'] = ydcm_long.groupby(['stu', 'item']).cumcount()
+
+ydcm_wide = ydcm_long.pivot(index = ['stu', 'draw'], columns = 'item', values = 'value')
+ydcm_wide = ydcm_wide.reset_index()
+
+y_item_columns = [f'item{i}' for i in np.arange(stan_dict['I']) + 1]
+ydcm_wide.columns = ['stu', 'draw'] + y_item_columns
+
+ydcm_wide['total'] = ydcm_wide.filter(regex = 'item').sum(axis = 1)
+ydcm_wide_count = ydcm_wide.groupby('draw')['total'].value_counts().reset_index()
+
+ydcm_scores = ydcm_wide_count.groupby('total')['count'].agg(
+    count = 'mean',
+    lower = q_lower,
+    upper = q_upper
+).reset_index()
+
+ydcm_wide_count['type'] = 'draw_counts'
+ydcm_scores['type'] = 'avg_counts'
+
+ydcm_wide_count['count'] = ydcm_wide_count['count'].astype(float)
+ydcm_wide_count = ydcm_wide_count.merge(ydcm_scores, 'outer')
+
+y_item = pd.DataFrame(stan_dict['Y'])
+y_item.columns = y_item_columns
+
+y_item['total'] = y_item.sum(axis = 1)
+y_item_count = y_item['total'].value_counts().reset_index()
+y_item_count['type'] = 'actual_counts'
+y_item_count['count'] = y_item_count['count'].astype(float)
+
+ydcm_wide_count = ydcm_wide_count.merge(y_item_count, 'outer')
+
+# t-values
+y_describe = y_item.filter(regex = 'item').agg(['mean', 'std']).reset_index()
+y_describe.drop(columns = 'index').transpose().round(2)
+
+stu_n = y_item.shape[0]
+
+t_stats_dict = {}
+
+# Loop from 1 to 7
+for i in range(1, stan_dict['I']):
+    item_name = f"item{i}"
+    
+    # Extract mean and std for the specific item
+    # We use .values[0] to get the scalar number out of the filtered dataframe
+    avg = y_describe.loc[y_describe['index'] == 'mean', item_name].values[0]
+    std = y_describe.loc[y_describe['index'] == 'std', item_name].values[0]
+    
+    # Calculate the observed t-value
+    # Formula: T = avg / (std / sqrt(n))
+    t_val = avg / ((std + 1e-10) / np.sqrt(stu_n))
+    
+    # Store it in our dictionary
+    t_stats_dict[item_name] = t_val
+
+# Convert the dictionary into a final Pandas Series
+obs_t_series = pd.Series(t_stats_dict)
+
+obs_t_series = obs_t_series.reset_index()
+obs_t_series = obs_t_series.rename(columns = {'index': 'item',
+                                              0: 'observed_t'})
+obs_t_series['item'] = obs_t_series['item'].str.replace('item', '')
+obs_t_series['item'] = obs_t_series['item'].astype(float)
+
+y_long_avg = ydcm_long.groupby(['item', 'draw'])['value'].agg(['mean', 'std']).reset_index()
+y_long_avg['n'] = stu_n
+
+y_long_avg['t_draw'] = y_long_avg['mean']/((y_long_avg['std'] + 1e-10)/np.sqrt(y_long_avg['n']))
+
+y_long_avg = y_long_avg.merge(obs_t_series, 'inner', 'item')
+
+# attribute calculations
+attrdf = fitdf.filter(regex = '^prob_resp_attr').reset_index()
+attrdf = attrdf.rename(columns = {'index': 'draw'})
+attrlong = attrdf.melt(id_vars = 'draw')
+
+attrlong['variable'] = attrlong['variable'].str.replace('prob_resp_attr[', '')
+attrlong['variable'] = attrlong['variable'].str.replace(']', '')
+attrlong[['stu', 'attr']] = attrlong['variable'].str.split(',', expand = True)
+attrlong[['draw', 'stu', 'attr']] = attrlong[['draw', 'stu', 'attr']].astype(int)
+attrlong = attrlong[['draw', 'stu', 'attr', 'value']]
+
+attravg = attrlong.groupby(['stu', 'attr'])['value'].agg(['mean', 'std', q_lower, q_upper]).reset_index()
+
+# mastery/proficiency thresholds
+attravg['mastery'] = np.where(attravg['mean'] > threshold, 1, 0)
+
+attr_w = attravg.pivot(index = 'stu', columns = 'attr', values = 'mastery').reset_index()
+
+# reliability
+attravg['acc_comp'] = attravg['mean'].apply(lambda p: max(p, 1 - p))
+attravg['cons_comp'] = attravg['mean'].apply(lambda p: p**2 + (1 - p)**2)
+
+# latent classes
+attr_class = fitdf.filter(regex = '^prob_resp_class').reset_index()
+attr_class = attr_class.rename(columns = {'index': 'draw'})
+class_long = attr_class.melt(id_vars = 'draw')
+
+class_long['variable'] = class_long['variable'].str.replace('prob_resp_class[', '')
+class_long['variable'] = class_long['variable'].str.replace(']', '')
+class_long[['stu', 'latclass']] = class_long['variable'].str.split(',', expand = True)
+class_long[['draw', 'stu', 'latclass']] = class_long[['draw', 'stu', 'latclass']].astype(int)
+class_long = class_long[['draw', 'stu', 'latclass', 'value']]
+
+class_max = class_long.loc[class_long['value'] == class_long.groupby('stu')['value'].transform('max')]
+class_max['high_prob_class'] = class_max['latclass']
+
+class_wmax = class_long.merge(class_max, 'inner', ['latclass', 'stu'])
+class_wmax = class_wmax.drop(columns = ['draw_y', 'latclass', 'value_y'])
+class_wmax = class_wmax.rename(columns = {'draw_x': 'draw',
+                             'value_x': 'value',
+                             'high_prob_class': 'class_member'})
+
+class_avg = class_wmax.groupby(['stu', 'class_member'])['value'].agg(['mean', 'std', q_lower, q_upper]).reset_index()
+class_avg = class_avg.merge(alpha, 'inner', left_on = 'class_member', right_on = 'index')
+
+class_prop = class_long.groupby('latclass')['value'].agg(['mean', 'std', q_lower, q_upper]).reset_index()
+class_prop = class_prop.merge(alpha, 'inner', left_on = 'latclass', right_on = 'index')
+```
+
+
+The plot below shows how many respondents got the following totals in the actual data and the average counts from the replciated datasets with 95% credible intervals. The credible intervals show that we there is 95% confidence that the true value should be within the intervals. If the credible intervals have the actual value within them that is an indicator that the model captured the true value. 
+
+```{python}
+#| label: Plot - Compare actual vs replicated total counts
+
+(
+  pn.ggplot(ydcm_wide_count.loc[ydcm_wide_count['type'] != 'draw_counts'],
+            pn.aes('total',
+                   'count'))
+  + pn.geom_errorbar(pn.aes(ymin = 'lower',
+                            ymax = 'upper'),
+                     alpha = .5,
+                     linetype = 'dashed')
+  + pn.geom_point(pn.aes(color = 'type'), alpha = .8)
+  + pn.scale_color_brewer('qual', 'Dark2')
+  + pn.scale_x_continuous(limits = [1, piavg['item'].unique().max()],
+                          breaks = piavg['item'].unique())
+  + pn.labs(title = 'Comparisons between Actual Counts of Respondents\nGetting Items/Questions Correct',
+  subtitle = 'And Posterior Average Correct')
+)
+```
+
+
+# Proficiency/Mastery
+
+While calculations are created to see how many respondents can be deemed proficent in each of the skills (see report folder), we can also see generally how many respondents are above the designated threshold.
+
+```{python}
+#| label: Plot - respondent proficiency
+
+(
+  pn.ggplot(attravg,
+            pn.aes('stu',
+                   'mean'))
+  + pn.geom_point(alpha = .7,
+                  color = 'seagreen')
+  + pn.geom_hline(yintercept = threshold,
+                  color = 'black',
+                  linetype = 'dashed')
+  + pn.facet_wrap('attr')
+  + pn.theme(legend_position = 'none',
+             axis_text_x = pn.element_blank())
+)
+
+```
+
+```{python}
+#| label: Proficiency List
+
+attr_wide = pd.concat([df['anon_id'], attr_w], axis = 1)
+attr_wide = attr_wide.drop(columns = 'stu')
+attr_wide.columns = ['anon_id', attr1, attr2, attr3, attr4, attr5]
+attr_wide
+
+```
+
+```{python}
+#| label: Proficiency data (csv)
+
+attravg.drop(columns = ['acc_comp', 'cons_comp']).to_csv(here(f'{resp_proficieny_raw_list_directory}'))
+attr_w.to_csv(here(f'{resp_proficiency_list_directory}'))
+
+```
+
+# Model Fit: MAP Estimation (No LOO)
+
+*Note: Leave One-Out Cross Validation (LOO) via Pareto k diagnostic requires MCMC sampling metrics and has been skipped for this MAP optimization.*
+
+# Item-Level Slipping & Guessing
+
+```{python}
+#| label: Plot - slipping and guessing
+(
+  pn.ggplot(noiseavg,
+    pn.aes('factor(item)', 'mean'))
+  + pn.geom_errorbar(pn.aes(ymin = 'q_lower', ymax = 'q_upper'),
+  linetype = 'dashed',
+  alpha = .7)
+  + pn.geom_point(color = 'seagreen', alpha = .7)
+  + pn.coord_flip()
+  + pn.scale_y_continuous(limits = [0, 1],
+                          breaks = np.arange(0, 1.1, .1))
+  + pn.labs(title = 'Probability of Noise',
+            x = 'Item',
+            y = 'Probability',
+            caption = 'Guess = Guessed and got answer correct\nSlip = Should know the answer, but got the item wrong')  
+  + pn.theme(legend_position = 'none')
+)
+```
+
+# Reliability
+
+```{python}
+#| label: Reliability metrics for model
+
+reliability = attravg.groupby('attr').agg(
+    accuracy = ('acc_comp', 'mean'),
+    consistency = ('cons_comp', 'mean')
+).reset_index()
+
+gt(reliability.round(3)).tab_header(title = 'Accuracy & Consistency')
+
+```
+
+## RMSE (MAP Specific Calculation)
+
+```{python}
+# For MAP estimation, ydcm_wide already contains a single matrix of predicted point estimates per student.
+# We bypass the .groupby('stu').agg(np.mean) used for multiple MCMC draws.
+ydcm_wide_avg = ydcm_wide[ydcm_wide.filter(regex = 'item').columns.tolist()]
+ydcm_wide_avg
+
+```
+
+```{python}
+# Re-establishing y_item for RMSE calc
+y_item = pd.DataFrame(stan_dict['Y'])
+y_item.columns = y_item_columns
+
+# calculate RMSE directly on the MAP estimate arrays
+rmse = np.sqrt(mean_squared_error(y_item.values.flatten(), ydcm_wide_avg.values.flatten()))
+
+fit_metrics = pd.DataFrame({
+    'design': [design],
+    'model': [model_type],
+    'prior': [prior],
+    'num_attr': [num_attr],
+    'rmse': [rmse]
+}, index=[0]).round(4)
+
+fit_metrics.to_csv(here(f'fit_metrics/output_Boting/{model_type}_{design}_{prior}_{num_attr}_fitmetrics.csv'))
+
+```

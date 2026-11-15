@@ -28,7 +28,7 @@ threshold = .8
 model_type = 'RDINO'
 design = 'no_testlet'
 num_attr = '5attr'
-prior = 'MAP'
+prior = 'MAP_uniform'
 
 attr1 = 'expect_fun'
 attr2 = 'def_var'
@@ -66,8 +66,8 @@ pn.theme_set(pn.theme_classic())
 
 data_directory = 'data/stat_134_2025_quiz5.csv'
 q_directory = 'q_matrix/quiz5_q_5attr.csv'
-stan_model_directory = 'stan_models/no_testlet/slightly_informative_priors/rdino_rdina_model.stan'
-stan_prior_directory = 'stan_models/no_testlet/slightly_informative_priors/rdino_rdina_prior.stan'
+stan_model_directory = 'stan_models/no_testlet/uniform_priors/rdino_rdina_model.stan'
+stan_prior_directory = 'stan_models/no_testlet/uniform_priors/rdino_rdina_prior.stan'
 
 diagnostics_directory = f'data/diagnostics/{model_type}_{design}_{num_attr}_{prior}_diagnostics.csv'
 save_model_joblib_directory = f'data/joblib_models/{model_type}_{design}_{num_attr}_{prior}.joblib'
