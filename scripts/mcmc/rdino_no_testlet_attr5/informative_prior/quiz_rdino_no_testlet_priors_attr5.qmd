@@ -390,20 +390,12 @@ Before we can conduct ppp-values for each item, I like to see the raw counts of 
 noise = fitdf.filter(regex = 'noise').reset_index()
 noise = noise.rename(columns = {'index': 'draw'})
 
-noiselong = noise.melt(id_vars = 'draw')
-noiselong[['type', 'item']] = noiselong['variable'].str.split('[', expand = True)
-noiselong['item'] = noiselong['item'].str.replace(']', '')
-noiselong = noiselong[['draw', 'type', 'item', 'value']]
-noiselong[['draw', 'item']] = noiselong[['draw', 'item']].astype(int)
-
-noiseavg = noiselong.groupby('item')
-
 noiseavg = pd.DataFrame({
-  'mean': noiseavg['value'].mean(),
-  'std': noiseavg['value'].std(),
-  'q_lower': q_lower(noiseavg['value']),
-  'q_upper': q_upper(noiseavg['value'])
-}).reset_index()
+  'mean': noise['noise'].mean(),
+  'std': noise['noise'].std(),
+  'q_lower': q_lower(noise['noise']),
+  'q_upper': q_upper(noise['noise'])
+}, index = [0])
 
 # pi matrix (classes getting items correct)
 pidf = fitdf.filter(regex = 'pi').reset_index()
@@ -777,7 +769,7 @@ Slipping and guessing parameters focus on the probability that a respondent will
 
 (
   pn.ggplot(noiseavg,
-    pn.aes('factor(item)', 'mean'))
+    pn.aes(1, 'mean'))
   + pn.geom_errorbar(pn.aes(ymin = 'q_lower', ymax = 'q_upper'),
   linetype = 'dashed',
   alpha = .7)

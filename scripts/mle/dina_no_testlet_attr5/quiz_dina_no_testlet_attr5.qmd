@@ -44,29 +44,17 @@ attr5 <- 'properties_of_variance'
 #| output: false
 #| label: Packages
 
-# install this to update with the packages I used
-# pak::pak("nbafrank/uvr-r")
+# install.packages("pak")
 
-# running everything below this should work
-library(uvr)
+# renv::init()
+# renv::install(c("tidyverse", "glue", "cdmTools", "GDINA", "here", "janitor", "see", "gt", "pkgbuild", "zip", "fungible"))
+# renv::install('fungible', repos = c('https://nwaller.r-universe.dev', 'https://cloud.r-project.org'))
+# renv::install("Pablo-Najera/cdmTools")
+# renv::install("cdmTools")
 
-# init()
-# lock()
-# add(c("tidyverse", "glue"))
-# add("Pablo-Najera/cdmTools")
-# add("GDINA")
-# add("here")
-# add("janitor")
-# add("see")
-# add("gt")
-
-# pak::pak("pkgbuild")
-# pak::pak("zip")
-# install.packages('fungible', repos = c('https://nwaller.r-universe.dev', 'https://cloud.r-project.org'))
-# pak::pak("Pablo-Najera/cdmTools")
-# pak::pak("GDINA")
-
-sync()
+# renv::update()
+# renv::snapshot()
+renv::restore()
 
 library(tidyverse)
 library(cdmTools)
@@ -78,21 +66,20 @@ cat_map <- purrr::map
 
 theme_set(theme_light())
 
-data_directory <- "data/stat_134_2025_quiz5.csv"
-q_directory <- "q_matrix/quiz5_q_5attr.csv"
+data_directory <- here::here("data/stat_134_2025_quiz5.csv")
+q_directory <- here::here("q_matrix/quiz5_q_5attr.csv")
 
-# save_model_joblib_directory <- glue("data/joblib_models/{model_type}_{design}_{num_attr}_{est_type}.joblib")
-resp_proficieny_raw_list_directory = glue("data/mastery_lists/rlang_{model_type}_{design}_{num_attr}_{est_type}_resp_prof_raw.csv")
-resp_proficiency_list_directory <- glue("data/mastery_lists/rlang_{model_type}_{design}_{num_attr}_{est_type}_resp_prof_list.csv")
+# save_model_joblib_directory <- here::here(glue("data/joblib_models/{model_type}_{design}_{num_attr}_{est_type}.joblib"))
+resp_proficiency_raw_list_directory = here::here(glue("data/mastery_lists/rlang_{model_type}_{design}_{num_attr}_{est_type}_resp_prof_raw.csv"))
+resp_proficiency_list_directory <- here::here(glue("data/mastery_lists/rlang_{model_type}_{design}_{num_attr}_{est_type}_resp_prof_list.csv"))
 ```
-
 
 # Data Ingestion & Preprocessing
 
 ```{r}
 #| label: DataFrame & Q-Matrix Loading
 
-data <- read_csv(here::here(glue('{data_directory}')))
+data <- read_csv(data_directory)
 
 df <-
 data |>
@@ -105,7 +92,7 @@ data |>
   )
 df
 
-qmatrix <- read_csv(here::here(glue('{q_directory}'))) |>
+qmatrix <- read_csv(q_directory) |>
   janitor::clean_names() |>
   filter(
     item != 35
@@ -344,7 +331,7 @@ write.csv(person_est[[1]] |>
             mutate(
               stu = data$anon_id
             ),
-          resp_proficieny_raw_list_directory
+          resp_proficiency_raw_list_directory
           )
 
 write.csv(person_thresh80,
@@ -569,15 +556,15 @@ write_csv(
 
 ```{r}
 # TODO need to examine delta & itemprob
-cat_map(
-  c("catprob", "delta", "gs", "itemprob"),
-  ~coef(dina_mod, .x, withSE = TRUE)
-)
+# cat_map(
+#   c("catprob", "delta", "gs", "itemprob"),
+#   ~coef(dina_mod, .x, withSE = TRUE)
+# )
 
-cat_map(
-  c("LCprob", "lambda"),
-  ~coef(dina_mod, .x)
-)
+# cat_map(
+#   c("LCprob", "lambda"),
+#   ~coef(dina_mod, .x)
+# )
 ```
 
 # Model Diagnostics: Actual vs. Predicted (Expected vs. Observed)

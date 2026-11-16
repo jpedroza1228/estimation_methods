@@ -66,8 +66,8 @@ generated quantities {
        eta[i] = Y[j,i] * log(p) + (1 - Y[j,i]) * log1m(p);
      }
      prob_joint[c] = exp(log_nu[c]) * exp(sum(eta));
-     log_lik[j] = log_sum_exp(prob_joint);
    }
+   log_lik[j] = log_sum_exp(prob_joint);
    prob_resp_class[j] = prob_joint/sum(prob_joint);
   }
 
