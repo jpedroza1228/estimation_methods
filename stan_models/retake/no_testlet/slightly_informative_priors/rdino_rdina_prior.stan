@@ -1,0 +1,53 @@
+data {
+  int<lower=1> J;
+  int<lower=1> I;
+  int<lower=1> C;
+  int<lower=1> K;
+  matrix<lower=0,upper=1> [J,I] Y;
+  matrix<lower=0,upper=1> [I,K] Q;
+  matrix<lower=0,upper=1> [C,K] alpha;
+  matrix<lower=0,upper=1> [I,C] xi;
+}
+
+parameters {
+  simplex[C] nu;
+  real<lower=0, upper=.5> noise;
+  // real<lower=0, upper=1> noise;
+}
+
+transformed parameters {
+  vector[C] log_nu;
+  matrix[I,C] pi;
+
+  log_nu = log(nu);
+
+  for (c in 1:C){
+    for (i in 1:I){
+      pi[i,c] = pow((1 - noise), xi[i,c]) * pow(noise, (1 - xi[i,c]));
+      // pi[i,c] = pow((1 - noise[i]), xi[i,c]) * pow(noise[i], (1 - xi[i,c]));
+    }
+  }
+}
+
+model{
+  array[C] real ps;
+  array[I] real eta;
+
+  noise ~ beta(5, 25);
+
+  // for (i in 1:I){
+    // noise[i] ~ beta(5, 20);
+    // noise[i] ~ beta(5, 25);
+  // }
+}
+
+generated quantities {
+  matrix[J,I] y_rep;
+
+  for (j in 1:J){
+    int z = categorical_rng(nu);
+    for (i in 1:I){
+      y_rep[j,i] = bernoulli_rng(pi[i,z]);
+    }
+  }
+}
