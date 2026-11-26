@@ -33,12 +33,7 @@ model{
   array[C] real ps;
   array[I] real eta;
 
-  noise ~ beta(5, 25);
-
-  // for (i in 1:I){
-    // noise[i] ~ beta(5, 20);
-    // noise[i] ~ beta(5, 25);
-  // }
+  noise ~ beta(8, 22);
 }
 
 generated quantities {

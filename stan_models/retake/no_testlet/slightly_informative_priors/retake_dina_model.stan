@@ -11,8 +11,8 @@ data {
 
 parameters {
   simplex[C] nu;
-  real<lower=0, upper=.5> noise;
-  // real<lower=0, upper=1> noise;
+  vector<lower=0, upper=1>[I] slip;
+  vector<lower=0, upper=1>[I] guess;
 }
 
 transformed parameters {
@@ -23,8 +23,8 @@ transformed parameters {
 
   for (c in 1:C){
     for (i in 1:I){
-      pi[i,c] = pow((1 - noise), xi[i,c]) * pow(noise, (1 - xi[i,c]));
-      // pi[i,c] = pow((1 - noise[i]), xi[i,c]) * pow(noise[i], (1 - xi[i,c]));
+      pi[i,c] = pow((1 - slip[i]), xi[i,c]) *
+      pow(guess[i], (1 - xi[i,c]));
     }
   }
 }
@@ -33,12 +33,45 @@ model{
   array[C] real ps;
   array[I] real eta;
 
-  noise ~ beta(5, 25);
+  slip[1] ~ beta(2, 28);
+  slip[2] ~ beta(2, 28);
+  slip[3] ~ beta(2, 28);
+  slip[4] ~ beta(4, 26);
+  slip[5] ~ beta(4, 26);
+  slip[6] ~ beta(4, 26); 
+  slip[7] ~ beta(4, 26);
+  slip[8] ~ beta(4, 26); 
+  slip[9] ~ beta(4, 26); 
+  slip[10] ~ beta(4, 26); 
+  slip[11] ~ beta(4, 26);
+  slip[12] ~ beta(4, 26);
+  slip[13] ~ beta(4, 26);
+  slip[14] ~ beta(10, 20);
+  slip[15] ~ beta(10, 20);
+  slip[16] ~ beta(10, 20); 
+  slip[17] ~ beta(10, 20);
+  slip[18] ~ beta(10, 20); 
+  slip[19] ~ beta(10, 20); 
+  slip[20] ~ beta(10, 20);
+  slip[21] ~ beta(10, 20);
+  slip[22] ~ beta(10, 20);
+  slip[23] ~ beta(10, 20);
+  slip[24] ~ beta(10, 20);
+  slip[25] ~ beta(10, 20);
+  slip[26] ~ beta(10, 20); 
+  slip[27] ~ beta(10, 20);
+  slip[28] ~ beta(10, 20); 
+  slip[29] ~ beta(10, 20); 
+  slip[30] ~ beta(10, 20); 
+  slip[31] ~ beta(10, 20);
+  slip[32] ~ beta(10, 20);
+  slip[33] ~ beta(10, 20);
+  slip[34] ~ beta(10, 20);
 
-  // for (i in 1:I){
-    // noise[i] ~ beta(5, 20);
-    // noise[i] ~ beta(5, 25);
-  // }
+  for (i in 1:I){
+    guess[i] ~ beta(6, 24);
+  }
+
   for (j in 1:J){
     for (c in 1:C){
       for (i in 1:I){
